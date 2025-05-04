@@ -26,6 +26,8 @@ export interface ExtractedReceipt {
   // Fields to track fallback responses
   _fallback?: boolean;
   _fallbackReason?: string;
+  // User-friendly message to display in the UI
+  _userMessage?: string;
   // Technical details for debugging
   _technicalDetails?: {
     error?: string;

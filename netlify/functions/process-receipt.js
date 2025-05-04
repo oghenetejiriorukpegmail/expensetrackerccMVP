@@ -53,22 +53,39 @@ exports.handler = async (event, context) => {
     // Set initial MIME type
     let mimeType = 'image/jpeg';  // Default MIME type
     let originalImageFormat = 'unknown';
+    let originalDataLength = imageData.length;
     
     // Check if the image contains a data URL prefix
     if (imageData.startsWith('data:')) {
-      console.log('Image contains data URL prefix, extracting base64 content');
+      console.log('Content has data URL prefix, extracting base64 content');
       // Extract mime type from the data URL
       const matches = imageData.match(/^data:([^;]+);base64,/);
       if (matches && matches.length > 1) {
         mimeType = matches[1];
         originalImageFormat = mimeType.split('/')[1] || 'unknown';
         console.log(`Detected MIME type from prefix: ${mimeType}, format: ${originalImageFormat}`);
+        
+        // Special handling for PDFs - maintain PDF MIME type if detected
+        if (mimeType.toLowerCase() === 'application/pdf' || originalImageFormat.toLowerCase() === 'pdf') {
+          console.log('PDF document detected, using application/pdf MIME type');
+          mimeType = 'application/pdf';
+          originalImageFormat = 'pdf';
+        }
       }
       
       // Extract the base64 content
       imageData = imageData.split('base64,')[1];
       console.log(`Extracted base64 data of length: ${imageData.length}`);
     }
+    
+    // For images (non-PDFs), use a reliable MIME type
+    if (mimeType !== 'application/pdf') {
+      // Improve compatibility by using a standard image format
+      console.log('Using standardized image MIME type for Document AI compatibility');
+      mimeType = 'image/png';
+    }
+    
+    console.log(`Final MIME type for Document AI: ${mimeType}`);
     
     // Validate the base64 data
     try {
@@ -206,20 +223,52 @@ exports.handler = async (event, context) => {
       // as it's more reliable in Document AI than some image formats
       let requestBody;
       try {
-        // Use the standard approach first
-        requestBody = {
-          rawDocument: {
-            content: imageData,
-            mimeType: mimeType
-          },
-          // Add processing options for better results
-          processOptions: {
-            // For OCR-based processing
-            ocrConfig: {
-              enableImageQualityScores: true
+        // Different processing options based on document type
+        if (mimeType === 'application/pdf') {
+          console.log('Creating request for PDF document processing');
+          // PDF-specific processing options
+          requestBody = {
+            rawDocument: {
+              content: imageData,
+              mimeType: mimeType
+            },
+            // PDF-specific processing options
+            processOptions: {
+              // For PDF documents
+              ocrConfig: {
+                enableImageQualityScores: true
+              },
+              // Add some tolerance for PDF layouts
+              layoutConfig: {
+                modelVersion: "LAYOUT_V2"
+              }
             }
-          }
-        };
+          };
+        } else {
+          console.log('Creating request for image document processing');
+          // Image-specific processing options
+          requestBody = {
+            rawDocument: {
+              content: imageData,
+              mimeType: mimeType
+            },
+            // Add detailed processing options for better results with images
+            processOptions: {
+              // Enhanced OCR settings
+              ocrConfig: {
+                enableImageQualityScores: true,
+                advancedOcrOptions: "enable_symbol_recognition=true;enable_image_quality_scores=true"
+              },
+              // Add some tolerance for lower quality images
+              layoutConfig: {
+                // Set this to handle receipt boundaries
+                tableBoundingBoxesPrecision: 0.5,
+                // Allow more tolerance in layout detection
+                modelVersion: "LAYOUT_V2"
+              }
+            }
+          };
+        }
         
       } catch (formatError) {
         console.error('Error preparing request body:', formatError);

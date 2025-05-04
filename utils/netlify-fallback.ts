@@ -92,6 +92,13 @@ export async function processReceiptWithNetlifyFallback(
     // If this is a fallback response, log detailed technical information
     if (extractedData._fallback && extractedData._technicalDetails) {
       console.log('Receipt processing fallback technical details:', extractedData._technicalDetails);
+      
+      // If it's the invalid image content error, provide a more informative UI message
+      if (extractedData._technicalDetails.error === 'INVALID_IMAGE_CONTENT') {
+        // Add a more helpful message to the extracted data
+        extractedData.vendor = 'Receipt could not be processed';
+        extractedData._userMessage = 'The receipt image could not be processed automatically. Please fill in the details manually.';
+      }
     }
     
     // Detailed log of what we received
