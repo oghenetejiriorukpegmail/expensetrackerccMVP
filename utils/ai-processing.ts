@@ -26,6 +26,16 @@ export interface ExtractedReceipt {
   // Fields to track fallback responses
   _fallback?: boolean;
   _fallbackReason?: string;
+  // Technical details for debugging
+  _technicalDetails?: {
+    error?: string;
+    imageFormat?: string;
+    mimeType?: string;
+    dataLength?: number;
+    timestamp?: string;
+    attempts?: number;
+    [key: string]: any; // Allow any additional technical details
+  };
 }
 
 export interface ExtractedOdometerReading {

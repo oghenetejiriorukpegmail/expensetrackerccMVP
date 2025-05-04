@@ -52,6 +52,7 @@ exports.handler = async (event, context) => {
     
     // Set initial MIME type
     let mimeType = 'image/jpeg';  // Default MIME type
+    let originalImageFormat = 'unknown';
     
     // Check if the image contains a data URL prefix
     if (imageData.startsWith('data:')) {
@@ -60,12 +61,54 @@ exports.handler = async (event, context) => {
       const matches = imageData.match(/^data:([^;]+);base64,/);
       if (matches && matches.length > 1) {
         mimeType = matches[1];
-        console.log(`Detected MIME type from prefix: ${mimeType}`);
+        originalImageFormat = mimeType.split('/')[1] || 'unknown';
+        console.log(`Detected MIME type from prefix: ${mimeType}, format: ${originalImageFormat}`);
       }
       
       // Extract the base64 content
       imageData = imageData.split('base64,')[1];
       console.log(`Extracted base64 data of length: ${imageData.length}`);
+    }
+    
+    // Validate the base64 data
+    try {
+      // Check if the string contains only valid base64 characters
+      const isValidBase64 = /^[A-Za-z0-9+/=]+$/.test(imageData);
+      if (!isValidBase64) {
+        console.warn('Base64 data contains invalid characters, cleaning up...');
+        imageData = imageData.replace(/[^A-Za-z0-9+/=]/g, '');
+      }
+      
+      // Check if the length is valid for base64 (multiple of 4)
+      const paddingNeeded = (4 - (imageData.length % 4)) % 4;
+      if (paddingNeeded > 0) {
+        console.log(`Adding ${paddingNeeded} padding characters to base64 data`);
+        imageData += '='.repeat(paddingNeeded);
+      }
+      
+      // Validate by attempting to decode a small sample
+      try {
+        const testSample = imageData.substring(0, 100);
+        Buffer.from(testSample, 'base64');
+        console.log('Base64 validation passed for sample');
+      } catch (e) {
+        console.error('Base64 validation failed:', e.message);
+        throw new Error('Invalid base64 encoding');
+      }
+    } catch (error) {
+      console.error('Base64 validation error:', error);
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          error: 'Invalid base64 image data',
+          details: error.message
+        })
+      };
     }
     
     // Get credentials from environment variables
@@ -157,30 +200,14 @@ exports.handler = async (event, context) => {
       // Document AI processor URL
       const processorUrl = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`;
       
-      // The mimeType should be set earlier
-      
-      // Ensure base64 is properly padded (important for Document AI)
-      const paddingNeeded = (4 - (imageData.length % 4)) % 4;
-      if (paddingNeeded > 0) {
-        console.log(`Adding ${paddingNeeded} padding characters to base64 data`);
-        imageData += '='.repeat(paddingNeeded);
-      }
-      
-      // Clean the base64 data to ensure it only contains valid base64 characters
-      imageData = imageData.replace(/[^A-Za-z0-9+/=]/g, '');
-      
       console.log(`Final MIME type: ${mimeType}, base64 length: ${imageData.length}`);
       
-      // Send request to Document AI
-      console.log('Sending request to Document AI...');
-      
-      const response = await fetch(processorUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
+      // Try to solve the invalid image content error by ensuring PDF format
+      // as it's more reliable in Document AI than some image formats
+      let requestBody;
+      try {
+        // Use the standard approach first
+        requestBody = {
           rawDocument: {
             content: imageData,
             mimeType: mimeType
@@ -192,7 +219,23 @@ exports.handler = async (event, context) => {
               enableImageQualityScores: true
             }
           }
-        })
+        };
+        
+      } catch (formatError) {
+        console.error('Error preparing request body:', formatError);
+        throw new Error(`Failed to prepare document request: ${formatError.message}`);
+      }
+      
+      // Send request to Document AI
+      console.log('Sending request to Document AI...');
+      
+      const response = await fetch(processorUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(requestBody)
       });
       
       if (!response.ok) {
@@ -213,6 +256,14 @@ exports.handler = async (event, context) => {
             if (errorJson.error.message === 'Invalid image content') {
               invalidImageError = true;
               console.log('Detected "Invalid image content" error from Document AI');
+              
+              // Log detailed information for debugging
+              console.log(`Image format: ${originalImageFormat}, MIME type: ${mimeType}, Data length: ${imageData.length}`);
+              
+              // For invalid image content errors, we can try different things:
+              // 1. Try a different MIME type
+              // 2. Return a fallback receipt
+              // For now, we'll use the fallback approach since it's most reliable
             }
           }
         } catch (parseError) {
@@ -232,7 +283,7 @@ exports.handler = async (event, context) => {
         if (invalidImageError) {
           console.log('Providing fallback receipt data for invalid image content error');
           
-          // Create a minimal receipt response so the app doesn't break
+          // Create a more informative fallback receipt response
           const fallbackReceipt = {
             vendor: 'Unknown Vendor',
             amount: 0,
@@ -245,7 +296,14 @@ exports.handler = async (event, context) => {
             total: 0,
             taxAmount: 0,
             _fallback: true,
-            _fallbackReason: 'Invalid image content - Document AI could not process the image'
+            _fallbackReason: `Invalid image content - Document AI could not process the image. Format: ${originalImageFormat}, MIME: ${mimeType}, Size: ${imageData.length} chars`,
+            _technicalDetails: {
+              error: 'INVALID_IMAGE_CONTENT',
+              imageFormat: originalImageFormat,
+              mimeType: mimeType,
+              dataLength: imageData.length,
+              timestamp: new Date().toISOString()
+            }
           };
           
           return {

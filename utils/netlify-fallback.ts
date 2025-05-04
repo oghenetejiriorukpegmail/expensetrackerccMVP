@@ -85,8 +85,14 @@ export async function processReceiptWithNetlifyFallback(
       location: receipt.location || { city: '', state: '', country: '' },
       taxAmount: receipt.taxAmount || 0,
       _fallback: receipt._fallback || true,
-      _fallbackReason: receipt._fallbackReason || 'Used Netlify function fallback'
+      _fallbackReason: receipt._fallbackReason || 'Used Netlify function fallback',
+      _technicalDetails: receipt._technicalDetails || undefined
     };
+    
+    // If this is a fallback response, log detailed technical information
+    if (extractedData._fallback && extractedData._technicalDetails) {
+      console.log('Receipt processing fallback technical details:', extractedData._technicalDetails);
+    }
     
     // Detailed log of what we received
     console.log('Netlify function returned receipt:', JSON.stringify({
