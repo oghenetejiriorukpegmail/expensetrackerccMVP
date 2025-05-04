@@ -36,49 +36,71 @@ exports.handler = async (event, context) => {
     
     console.log('Received request for Google authentication token');
     
-    // Check if credentials file exists
-    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 
-                           path.resolve(process.cwd(), 'google_document_ai.json');
-    
+    // In Netlify, we should use environment variables directly
     let credentials;
-    try {
-      // Check if credentials file exists in the function environment
-      if (!fs.existsSync(credentialsPath)) {
-        console.error('Google credentials file not found at path:', credentialsPath);
-        
-        // Try to use environment variables directly if credentials file is missing
-        if (process.env.GOOGLE_CREDENTIALS) {
-          console.log('Using credentials from environment variable');
-          try {
-            credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-          } catch (parseError) {
-            console.error('Failed to parse credentials from environment:', parseError);
-            return {
-              statusCode: 500,
-              body: JSON.stringify({ 
-                error: 'Failed to parse credentials from environment', 
-                details: parseError.message 
-              })
-            };
-          }
-        } else {
-          return {
-            statusCode: 500,
-            body: JSON.stringify({ error: 'Credentials file not found and no environment credential provided' })
-          };
-        }
-      } else {
-        // Parse credentials from file
-        console.log('Reading credentials from file:', credentialsPath);
-        credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+    
+    // Try to get credentials from environment variables
+    if (process.env.GOOGLE_CREDENTIALS) {
+      console.log('Using credentials from GOOGLE_CREDENTIALS environment variable');
+      try {
+        credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+        console.log('Successfully parsed credentials from environment');
+      } catch (parseError) {
+        console.error('Failed to parse credentials from environment:', parseError);
+        return {
+          statusCode: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            error: 'Failed to parse credentials from environment', 
+            details: parseError.message 
+          })
+        };
       }
-    } catch (fileError) {
-      console.error('Error reading credentials:', fileError);
+    } 
+    // If no direct credentials, try to construct from individual environment variables
+    else if (process.env.GOOGLE_PROJECT_ID && process.env.GOOGLE_PRIVATE_KEY && process.env.GOOGLE_CLIENT_EMAIL) {
+      console.log('Constructing credentials from individual environment variables');
+      try {
+        credentials = {
+          type: 'service_account',
+          project_id: process.env.GOOGLE_PROJECT_ID,
+          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        };
+        console.log('Successfully constructed credentials');
+      } catch (error) {
+        console.error('Failed to construct credentials:', error);
+        return {
+          statusCode: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            error: 'Failed to construct credentials from environment variables', 
+            details: error.message 
+          })
+        };
+      }
+    } else {
+      console.error('No Google credentials found in environment variables');
       return {
         statusCode: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ 
-          error: 'Error reading credentials file', 
-          details: fileError.message 
+          error: 'No Google credentials found. Set GOOGLE_CREDENTIALS or individual credential environment variables.'
         })
       };
     }
@@ -90,28 +112,18 @@ exports.handler = async (event, context) => {
     ];
     
     try {
-      let auth;
+      console.log('Credential type found:', credentials ? credentials.type || 'unknown' : 'none');
+      console.log('Project ID:', credentials ? credentials.project_id || 'not found' : 'none');
+      console.log('Client email found:', credentials ? (credentials.client_email ? 'yes' : 'no') : 'none');
+      console.log('Private key found:', credentials ? (credentials.private_key ? 'yes' : 'no') : 'none');
       
-      // Create a new GoogleAuth instance with the credentials
-      if (credentials) {
-        if (fs.existsSync(credentialsPath)) {
-          auth = new GoogleAuth({
-            keyFilename: credentialsPath,
-            scopes: SCOPES
-          });
-        } else {
-          // Use credentials from environment
-          auth = new GoogleAuth({
-            credentials: credentials,
-            scopes: SCOPES
-          });
-        }
-      } else {
-        return {
-          statusCode: 500,
-          body: JSON.stringify({ error: 'No valid credentials available' })
-        };
-      }
+      // Create a new GoogleAuth instance with the credentials from environment
+      const auth = new GoogleAuth({
+        credentials: credentials,
+        scopes: SCOPES
+      });
+      
+      console.log('Created GoogleAuth instance with scopes:', SCOPES.join(', '));
       
       // Get the client
       const client = await auth.getClient();

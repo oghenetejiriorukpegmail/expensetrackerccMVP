@@ -75,17 +75,30 @@ export async function processReceiptWithNetlifyFallback(
     // Create a standardized receipt object
     const extractedData: ExtractedReceipt = {
       vendor: receipt.vendor || 'Unknown Vendor',
-      amount: receipt.total || 0,
+      amount: receipt.subtotal || receipt.total || 0,
       date: receipt.date || new Date().toISOString().split('T')[0],
-      confidence: receipt.confidence || 0.5,
+      confidence: receipt.confidence || 0.85,
       currency: receipt.currency || 'USD',
       expenseType: receipt.expenseType || 'other',
       total: receipt.total || 0,
       items: receipt.items || [],
       location: receipt.location || { city: '', state: '', country: '' },
+      taxAmount: receipt.taxAmount || 0,
       _fallback: true,
       _fallbackReason: 'Used Netlify function fallback'
     };
+    
+    // Detailed log of what we received
+    console.log('Netlify function returned receipt:', JSON.stringify({
+      vendor: extractedData.vendor,
+      amount: extractedData.amount,
+      total: extractedData.total,
+      expenseType: extractedData.expenseType,
+      location: extractedData.location,
+      taxAmount: extractedData.taxAmount,
+      itemCount: extractedData.items?.length || 0,
+      confidence: extractedData.confidence
+    }, null, 2));
     
     console.log('Successfully processed receipt with Netlify function fallback');
     return extractedData;
