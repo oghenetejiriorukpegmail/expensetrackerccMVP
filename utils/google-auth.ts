@@ -27,30 +27,48 @@ export async function getGoogleAccessToken(): Promise<string> {
     
     // Check if we're in a browser environment
     if (typeof window !== 'undefined') {
-      // Call our server endpoint that handles authentication
-      const response = await fetch('/api/get-google-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          projectId: config.public.googleProjectId,
-          processorId: config.public.googleProcessorId
-        })
-      });
+      // Try the Netlify function first, then fall back to the API endpoint
+      const tokenEndpoints = [
+        '/.netlify/functions/get-google-token',
+        '/api/get-google-token'
+      ];
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to get Google access token:', errorText);
-        
-        // Disable fallback - only use Document AI
-        // if (response.status === 401) {
-        //   console.warn('Google Document AI authentication failed. Using fallback AI provider.');
-        //   return useFallbackAIProvider();
-        // }
-        
-        throw new Error(`Auth request failed: ${response.status} - ${errorText}`);
+      let response;
+      let lastError;
+      
+      // Try each endpoint in order
+      for (const endpoint of tokenEndpoints) {
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              projectId: config.public.googleProjectId,
+              processorId: config.public.googleProcessorId
+            })
+          });
+          
+          // If the request was successful, break the loop
+          if (response.ok) {
+            break;
+          } else {
+            lastError = await response.text();
+            console.warn(`Failed to get token from ${endpoint}: ${lastError}`);
+          }
+        } catch (fetchError) {
+          lastError = fetchError.message;
+          console.warn(`Error fetching from ${endpoint}: ${lastError}`);
+        }
       }
+      
+      // If we still don't have a good response, throw an error
+      if (!response || !response.ok) {
+        throw new Error(`All auth requests failed. Last error: ${lastError}`);
+      }
+      
+      // We already verified response.ok above, so we can proceed to parse the response
       
       const data = await response.json();
       

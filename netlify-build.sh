@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Set up Netlify functions before building
+echo "Setting up Netlify functions..."
+node netlify-functions-setup.js
+
 # Run the Nuxt build with static generation
 NITRO_PRESET=static npm run build
 
