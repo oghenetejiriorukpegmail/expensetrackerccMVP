@@ -84,8 +84,8 @@ export async function processReceiptWithNetlifyFallback(
       items: receipt.items || [],
       location: receipt.location || { city: '', state: '', country: '' },
       taxAmount: receipt.taxAmount || 0,
-      _fallback: true,
-      _fallbackReason: 'Used Netlify function fallback'
+      _fallback: receipt._fallback || true,
+      _fallbackReason: receipt._fallbackReason || 'Used Netlify function fallback'
     };
     
     // Detailed log of what we received

@@ -48,6 +48,26 @@ exports.handler = async (event, context) => {
       };
     }
     
+    console.log(`Received image data of length: ${imageData.length}`);
+    
+    // Set initial MIME type
+    let mimeType = 'image/jpeg';  // Default MIME type
+    
+    // Check if the image contains a data URL prefix
+    if (imageData.startsWith('data:')) {
+      console.log('Image contains data URL prefix, extracting base64 content');
+      // Extract mime type from the data URL
+      const matches = imageData.match(/^data:([^;]+);base64,/);
+      if (matches && matches.length > 1) {
+        mimeType = matches[1];
+        console.log(`Detected MIME type from prefix: ${mimeType}`);
+      }
+      
+      // Extract the base64 content
+      imageData = imageData.split('base64,')[1];
+      console.log(`Extracted base64 data of length: ${imageData.length}`);
+    }
+    
     // Get credentials from environment variables
     let credentials;
     if (process.env.GOOGLE_CREDENTIALS) {
@@ -137,8 +157,19 @@ exports.handler = async (event, context) => {
       // Document AI processor URL
       const processorUrl = `https://${location}-documentai.googleapis.com/v1/projects/${projectId}/locations/${location}/processors/${processorId}:process`;
       
-      // Determine MIME type (default to JPEG)
-      let mimeType = 'image/jpeg';
+      // The mimeType should be set earlier
+      
+      // Ensure base64 is properly padded (important for Document AI)
+      const paddingNeeded = (4 - (imageData.length % 4)) % 4;
+      if (paddingNeeded > 0) {
+        console.log(`Adding ${paddingNeeded} padding characters to base64 data`);
+        imageData += '='.repeat(paddingNeeded);
+      }
+      
+      // Clean the base64 data to ensure it only contains valid base64 characters
+      imageData = imageData.replace(/[^A-Za-z0-9+/=]/g, '');
+      
+      console.log(`Final MIME type: ${mimeType}, base64 length: ${imageData.length}`);
       
       // Send request to Document AI
       console.log('Sending request to Document AI...');
@@ -167,6 +198,7 @@ exports.handler = async (event, context) => {
       if (!response.ok) {
         let errorMessage = `Document AI failed: ${response.status} ${response.statusText}`;
         let errorDetails = '';
+        let invalidImageError = false;
         
         try {
           const errorJson = await response.json();
@@ -176,14 +208,61 @@ exports.handler = async (event, context) => {
           if (errorJson.error) {
             errorMessage = `Document AI error: ${errorJson.error.message || errorJson.error}`;
             errorDetails = errorJson.error.details || JSON.stringify(errorJson.error);
+            
+            // Check specifically for "Invalid image content" error
+            if (errorJson.error.message === 'Invalid image content') {
+              invalidImageError = true;
+              console.log('Detected "Invalid image content" error from Document AI');
+            }
           }
         } catch (parseError) {
           // If not JSON, get raw text
           const errorText = await response.text();
           console.error('Document AI error response (text):', errorText);
           errorDetails = errorText;
+          
+          // Check if the error text contains the invalid image content error
+          if (errorText.includes('Invalid image content')) {
+            invalidImageError = true;
+            console.log('Detected "Invalid image content" error from Document AI in text response');
+          }
         }
         
+        // If we got an invalid image error, try to generate a fallback response
+        if (invalidImageError) {
+          console.log('Providing fallback receipt data for invalid image content error');
+          
+          // Create a minimal receipt response so the app doesn't break
+          const fallbackReceipt = {
+            vendor: 'Unknown Vendor',
+            amount: 0,
+            date: new Date().toISOString().split('T')[0],
+            confidence: 0.1,
+            currency: 'USD',
+            expenseType: 'other',
+            location: { city: '', state: '', country: '' },
+            items: [],
+            total: 0,
+            taxAmount: 0,
+            _fallback: true,
+            _fallbackReason: 'Invalid image content - Document AI could not process the image'
+          };
+          
+          return {
+            statusCode: 200, // Return 200 to prevent app breaking
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              receipt: fallbackReceipt,
+              message: 'Document AI could not process the image. Using fallback data.'
+            })
+          };
+        }
+        
+        // For other errors, return the error status and details
         return {
           statusCode: response.status,
           headers: {
