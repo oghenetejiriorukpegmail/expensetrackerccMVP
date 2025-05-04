@@ -218,19 +218,23 @@ export async function processReceiptWithAI(
         
         return result;
       } catch (documentAiError) {
-        // Disable fallback mechanism
-        // Check if this is a fallback request
-        // if (documentAiError.message === 'FALLBACK_AI_REQUESTED') {
-        //   console.log('Falling back to alternative AI processing...');
-        //   
-        //   // Use OpenRouter or Gemini instead
-        //   const result = await processWithOpenRouter(imageUrlOrBase64);
-        //   return result;
-        // }
-        
-        // Re-throw the error - don't use fallback
-        console.log('Only using Document AI - no fallback to alternative providers.');
-        throw documentAiError;
+        // Try to use Netlify function fallback
+        try {
+          console.log('Document AI failed, falling back to Netlify function...');
+          
+          // Dynamically import the Netlify fallback to avoid breaking bundling
+          const { processReceiptWithNetlifyFallback } = await import('./netlify-fallback');
+          
+          // Use Netlify function fallback
+          const result = await processReceiptWithNetlifyFallback(imageUrlOrBase64);
+          return result;
+        } catch (fallbackError) {
+          console.error('Netlify fallback also failed:', fallbackError);
+          
+          // Return a minimal receipt so the UI doesn't break
+          console.log('Using minimal fallback receipt');
+          return createFallbackReceipt(`Document AI and Netlify fallback both failed: ${fallbackError.message}`);
+        }
       }
     } catch (error) {
       // Handle known AI processing errors
