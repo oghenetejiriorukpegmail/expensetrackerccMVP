@@ -39,22 +39,29 @@ export async function getGoogleAccessToken(): Promise<string> {
       // Try each endpoint in order
       for (const endpoint of tokenEndpoints) {
         try {
+          console.log(`Attempting to get token from ${endpoint}...`);
+          
+          const requestBody = {
+            projectId: config.public.googleProjectId,
+            processorId: config.public.googleProcessorId
+          };
+          console.log('Request body:', JSON.stringify(requestBody));
+          
           response = await fetch(endpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              projectId: config.public.googleProjectId,
-              processorId: config.public.googleProcessorId
-            })
+            body: JSON.stringify(requestBody)
           });
           
           // If the request was successful, break the loop
           if (response.ok) {
+            console.log(`Successfully got token from ${endpoint}`);
             break;
           } else {
-            lastError = await response.text();
+            const errorText = await response.text();
+            lastError = `Status: ${response.status}, Error: ${errorText}`;
             console.warn(`Failed to get token from ${endpoint}: ${lastError}`);
           }
         } catch (fetchError) {
