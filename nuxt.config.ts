@@ -13,6 +13,9 @@ export default defineNuxtConfig({
       strict: false
     }
   },
+  nitro: {
+    preset: 'netlify'
+  },
   experimental: {
     payloadExtraction: false
   },
