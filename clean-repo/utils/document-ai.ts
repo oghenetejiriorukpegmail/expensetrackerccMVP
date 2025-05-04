@@ -89,7 +89,7 @@ export async function processReceiptWithDocumentAI(
           content: base64Data,
           mimeType: mimeType
         },
-        // Add processing options for better results
+        // Add processing options for better results - updated for latest API version
         processOptions: {
           // For OCR-based processing
           ocrConfig: {

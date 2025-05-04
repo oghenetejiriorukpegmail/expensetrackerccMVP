@@ -237,11 +237,8 @@ exports.handler = async (event, context) => {
               // For PDF documents
               ocrConfig: {
                 enableImageQualityScores: true
-              },
-              // Add some tolerance for PDF layouts
-              layoutConfig: {
-                modelVersion: "LAYOUT_V2"
               }
+              // Remove layoutConfig with unsupported parameters
             }
           };
         } else {
@@ -258,14 +255,8 @@ exports.handler = async (event, context) => {
               ocrConfig: {
                 enableImageQualityScores: true,
                 advancedOcrOptions: "enable_symbol_recognition=true;enable_image_quality_scores=true"
-              },
-              // Add some tolerance for lower quality images
-              layoutConfig: {
-                // Set this to handle receipt boundaries
-                tableBoundingBoxesPrecision: 0.5,
-                // Allow more tolerance in layout detection
-                modelVersion: "LAYOUT_V2"
               }
+              // Remove layout config with unsupported parameters
             }
           };
         }
