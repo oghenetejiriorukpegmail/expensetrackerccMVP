@@ -204,7 +204,31 @@ export async function processReceiptWithAI(
   // Define the operation to be retried
   const processReceipt = async (): Promise<ExtractedReceipt | null> => {
     try {
-      console.log('Processing receipt with Document AI only...');
+      // First check if we're running in a browser
+      const isBrowser = typeof window !== 'undefined';
+      
+      // If we're in a browser with CSP restrictions, try Netlify function first
+      if (isBrowser) {
+        try {
+          console.log('Running in browser, using Netlify function for receipt processing...');
+          
+          // Dynamically import the Netlify fallback to avoid breaking bundling
+          const { processReceiptWithNetlifyFallback } = await import('./netlify-fallback');
+          
+          // Use Netlify function directly (not as a fallback)
+          const result = await processReceiptWithNetlifyFallback(imageUrlOrBase64);
+          return result;
+        } catch (netlifyError) {
+          console.error('Netlify function receipt processing failed:', netlifyError);
+          // If Netlify function fails, we could try Document AI directly, but that
+          // likely won't work in browsers due to CSP, so we create a fallback receipt
+          console.log('Using fallback receipt due to Netlify function failure');
+          return createFallbackReceipt(`Netlify function failed: ${netlifyError.message}`);
+        }
+      }
+      
+      // For non-browser environments or if configured explicitly to try Document AI first
+      console.log('Trying Document AI for receipt processing...');
       
       try {
         // Use Google Document AI for receipt processing
@@ -239,11 +263,11 @@ export async function processReceiptWithAI(
           const result = await processReceiptWithNetlifyFallback(imageUrlOrBase64);
           return result;
         } catch (fallbackError) {
-          console.error('Netlify fallback also failed:', fallbackError);
+          console.error('All receipt processing methods failed:', fallbackError);
           
           // Return a minimal receipt so the UI doesn't break
           console.log('Using minimal fallback receipt');
-          return createFallbackReceipt(`Document AI and Netlify fallback both failed: ${fallbackError.message}`);
+          return createFallbackReceipt(`All receipt processing methods failed: ${fallbackError.message}`);
         }
       }
     } catch (error) {
