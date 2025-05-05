@@ -331,10 +331,20 @@ const handleGoogleLogin = async () => {
   loading.value = true;
   
   try {
+    // Use the production URL for the redirect
+    // In development, this will be updated automatically by Supabase
+    const redirectUrl = 'https://expensetracermvp.netlify.app/dashboard';
+    
+    console.log('Starting Google OAuth flow with redirect to:', redirectUrl);
+    
     const { data, error: loginError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/dashboard`
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
       }
     });
     
@@ -347,7 +357,16 @@ const handleGoogleLogin = async () => {
     
   } catch (err: any) {
     console.error('Google login error:', err);
-    error.value = err.message || 'Failed to sign in with Google. Please try again.';
+    
+    // Check for specific error types for better error messages
+    if (err.message && err.message.includes('redirect_uri_mismatch')) {
+      error.value = 'Authentication configuration error: Redirect URI mismatch. Please contact the administrator.';
+    } else if (err.message && err.message.includes('invalid_client')) {
+      error.value = 'Authentication configuration error: Invalid client. Please contact the administrator.';
+    } else {
+      error.value = err.message || 'Failed to sign in with Google. Please try again.';
+    }
+    
     loading.value = false;
   }
 };
