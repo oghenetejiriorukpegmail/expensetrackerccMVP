@@ -20,8 +20,28 @@ export const createSupabaseClient = () => {
     console.warn('Could not get existing Supabase client, creating a new one');
   }
   
-  // Create new client only as fallback
+  // Create new client only as fallback with local storage configuration
   const config = useRuntimeConfig();
+  
+  // Define browser storage wrapper to force persistence
+  const customStorage = {
+    getItem: (key) => {
+      if (typeof window === 'undefined') return null;
+      const value = localStorage.getItem(key);
+      return value;
+    },
+    setItem: (key, value) => {
+      if (typeof window === 'undefined') return;
+      localStorage.setItem(key, value);
+      // Save to sessionStorage as well for redundancy
+      sessionStorage.setItem(key, value);
+    },
+    removeItem: (key) => {
+      if (typeof window === 'undefined') return;
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+  };
   
   return createClient(
     config.public.supabaseUrl,
@@ -31,7 +51,7 @@ export const createSupabaseClient = () => {
         persistSession: true,
         autoRefreshToken: true,
         storageKey: 'supabase-auth',
-        storage: typeof window !== 'undefined' ? localStorage : undefined,
+        storage: typeof window !== 'undefined' ? customStorage : undefined,
       },
       realtime: {
         params: {

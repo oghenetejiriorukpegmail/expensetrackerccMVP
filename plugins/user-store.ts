@@ -11,13 +11,45 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   // This ensures the Nuxt context is available
   const initializeUserStore = async () => {
     try {
-      // Check if user is authenticated
+      // First try to recover from localStorage if available
+      if (typeof localStorage !== 'undefined') {
+        const storedSession = localStorage.getItem('supabase-auth');
+        if (storedSession) {
+          try {
+            const parsedSession = JSON.parse(storedSession);
+            if (parsedSession?.access_token && parsedSession?.refresh_token) {
+              console.log('Found session in localStorage, attempting to restore');
+              // Set the session explicitly
+              await supabase.auth.setSession({
+                access_token: parsedSession.access_token,
+                refresh_token: parsedSession.refresh_token
+              });
+            }
+          } catch (e) {
+            console.error('Error parsing stored session:', e);
+          }
+        }
+      }
+      
+      // Now check if the session was successfully restored or exists naturally
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
         console.log('Session found on app load, initializing user profile');
         // Initialize user profile and settings
         await userStore.fetchProfile(supabase);
+        
+        // Re-store the session for redundancy
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('supabase-auth', JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+            expires_at: session.expires_at,
+            user: session.user
+          }));
+        }
+      } else {
+        console.log('No session found on app load');
       }
     } catch (error) {
       console.error('Error initializing user store:', error);

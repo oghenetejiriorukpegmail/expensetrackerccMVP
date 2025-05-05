@@ -44,7 +44,8 @@ export default defineNuxtConfig({
     cookieOptions: {
       maxAge: 60 * 60 * 24 * 30, // 30 days
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production'
+      secure: process.env.NODE_ENV === 'production',
+      path: '/' // Ensure cookies are available across the entire site
     },
     clientOptions: {
       auth: {
@@ -52,6 +53,8 @@ export default defineNuxtConfig({
         autoRefreshToken: true,
         storageKey: 'supabase-auth',
         storage: process.client ? localStorage : undefined,
+        detectSessionInUrl: false, // Don't automatically detect sessions in URLs
+        flowType: 'pkce', // Use PKCE flow for better security
       }
     }
   },

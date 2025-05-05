@@ -271,6 +271,25 @@ const handleLogin = async () => {
     
     console.log('Login successful, user:', user.id);
     
+    // Explicitly save session to localStorage for redundancy
+    if (typeof localStorage !== 'undefined') {
+      // Save the full session for maximum compatibility
+      localStorage.setItem('supabase-auth', JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: session.expires_at,
+        user: user
+      }));
+      
+      // Also save to sessionStorage as additional backup
+      sessionStorage.setItem('supabase-auth', JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: session.expires_at,
+        user: user
+      }));
+    }
+    
     // Wait a moment for the auth state to fully propagate
     await new Promise(resolve => setTimeout(resolve, 1000));
     
