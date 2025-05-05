@@ -6,9 +6,19 @@ export default defineNuxtPlugin((nuxtApp) => {
   if (process.client) {
     const userStore = useUserStore();
     
+    // Track if we're currently refreshing to prevent recursion
+    let isRefreshing = false;
+    
     // Initialize session refresher - no longer using global middleware
     const refreshSession = async () => {
+      // Prevent recursive calls
+      if (isRefreshing) {
+        console.log('Already refreshing session, skipping');
+        return;
+      }
+      
       try {
+        isRefreshing = true;
         const supabase = useSupabaseClient();
         
         // Check if session exists using Supabase client
@@ -47,7 +57,7 @@ export default defineNuxtPlugin((nuxtApp) => {
             }
           }
           
-          // Always make sure the profile is loaded after session changes
+          // Only load the profile if we don't have one already
           if (!userStore.profile) {
             console.log('Loading user profile after session refresh');
             await userStore.fetchProfile(supabase);
@@ -55,6 +65,8 @@ export default defineNuxtPlugin((nuxtApp) => {
         }
       } catch (err) {
         console.error('Error in session refresh:', err);
+      } finally {
+        isRefreshing = false;
       }
     };
     
@@ -66,27 +78,46 @@ export default defineNuxtPlugin((nuxtApp) => {
     
     const supabase = useSupabaseClient();
     
+    // Track if we're currently processing an auth state change to prevent recursion
+    let isProcessingAuthChange = false;
+    
     // Handle auth state changes (especially for OAuth callbacks)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event);
         
+        // Prevent recursive calls
+        if (isProcessingAuthChange) {
+          console.log('Already processing auth change, skipping');
+          return;
+        }
+        
+        // Only process SIGNED_IN once per page load
         if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
           if (session) {
-            // If signed in with OAuth provider, we need to ensure the profile is created
-            console.log('User signed in, updating profile');
-            await userStore.fetchProfile(supabase);
-            
-            // Check if this is an OAuth redirect
-            const url = new URL(window.location.href);
-            const hasAuthParams = url.hash.includes('access_token') || 
-                                url.searchParams.has('access_token') || 
-                                url.searchParams.has('code');
-            
-            // If we detect OAuth parameters and user is authenticated but not on dashboard
-            if (hasAuthParams && !window.location.pathname.includes('/dashboard')) {
-              console.log('Detected OAuth redirect, navigating to dashboard');
-              window.location.href = '/dashboard';
+            try {
+              isProcessingAuthChange = true;
+              
+              // If user profile already exists, don't reload it
+              if (!userStore.profile) {
+                // If signed in with OAuth provider, we need to ensure the profile is created
+                console.log('User signed in, updating profile');
+                await userStore.fetchProfile(supabase);
+              }
+              
+              // Check if this is an OAuth redirect
+              const url = new URL(window.location.href);
+              const hasAuthParams = url.hash.includes('access_token') || 
+                                  url.searchParams.has('access_token') || 
+                                  url.searchParams.has('code');
+              
+              // If we detect OAuth parameters and user is authenticated but not on dashboard
+              if (hasAuthParams && !window.location.pathname.includes('/dashboard')) {
+                console.log('Detected OAuth redirect, navigating to dashboard');
+                window.location.href = '/dashboard';
+              }
+            } finally {
+              isProcessingAuthChange = false;
             }
           }
         } else if (event === 'SIGNED_OUT') {
