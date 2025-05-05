@@ -157,7 +157,7 @@ exports.handler = async (event, context) => {
     }
     
     // Create a new Excel workbook
-    const workbook = new ExcelJS.Workbook();
+    let workbook = new ExcelJS.Workbook();
     workbook.creator = 'Expense Tracker';
     workbook.lastModifiedBy = 'Expense Tracker';
     workbook.created = new Date();
