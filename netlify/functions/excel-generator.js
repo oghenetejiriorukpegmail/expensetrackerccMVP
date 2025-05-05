@@ -163,10 +163,15 @@ exports.handler = async (event, context) => {
     workbook.created = new Date();
     workbook.modified = new Date();
     
+    // Use a completely different approach for templates
+    let isUsingTemplate = false;
+    
     // If a template URL is provided, try to use it as a base
     if (templateUrl) {
       try {
         console.log('Loading Excel template from URL:', templateUrl);
+        
+        let templateBuffer;
         
         // Fetch the template from Supabase if it's a storage URL
         if (templateUrl.includes('supabase') || templateUrl.includes('storage')) {
@@ -191,10 +196,9 @@ exports.handler = async (event, context) => {
             throw new Error('Template file not found');
           }
           
-          // Load the template
-          const templateBuffer = await data.arrayBuffer();
-          await workbook.xlsx.load(templateBuffer);
-          console.log('Successfully loaded template from Supabase storage');
+          // Get the buffer
+          templateBuffer = await data.arrayBuffer();
+          console.log('Successfully downloaded template from Supabase storage');
         } else {
           // Regular fetch for other URLs
           const response = await fetch(templateUrl);
@@ -202,13 +206,43 @@ exports.handler = async (event, context) => {
             throw new Error(`Failed to fetch template: ${response.statusText}`);
           }
           
-          const templateBuffer = await response.arrayBuffer();
+          templateBuffer = await response.arrayBuffer();
+          console.log('Successfully downloaded template from URL');
+        }
+        
+        // Load a fresh workbook from the template instead of using the existing one
+        if (templateBuffer && templateBuffer.byteLength > 0) {
+          // Create a new workbook from the template
+          console.log('Creating new workbook from template buffer');
+          workbook = new ExcelJS.Workbook();
           await workbook.xlsx.load(templateBuffer);
-          console.log('Successfully loaded template from URL');
+          
+          // Set metadata
+          workbook.creator = 'Expense Tracker';
+          workbook.lastModifiedBy = 'Expense Tracker';
+          workbook.created = new Date();
+          workbook.modified = new Date();
+          
+          console.log(`Template loaded with ${workbook.worksheets.length} worksheets`);
+          workbook.worksheets.forEach((sheet, i) => {
+            console.log(`  Sheet ${i+1}: ${sheet.name} (${sheet.rowCount} rows)`);
+          });
+          
+          isUsingTemplate = true;
+        } else {
+          throw new Error('Template buffer is empty');
         }
       } catch (error) {
         console.error('Failed to load template:', error);
+        console.log('Falling back to default workbook');
+        
         // Continue with a new workbook if template loading fails
+        workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Expense Tracker';
+        workbook.lastModifiedBy = 'Expense Tracker';
+        workbook.created = new Date();
+        workbook.modified = new Date();
+        
         workbook.addWorksheet('Summary');
         workbook.addWorksheet('Expenses');
         workbook.addWorksheet('Mileage');
@@ -220,42 +254,175 @@ exports.handler = async (event, context) => {
       workbook.addWorksheet('Mileage');
     }
     
-    // Get worksheets (or create them if they don't exist)
-    let summarySheet = workbook.getWorksheet('Summary') || workbook.getWorksheet('Trip Summary');
-    let expensesSheet = workbook.getWorksheet('Expenses');
-    let mileageSheet = workbook.getWorksheet('Mileage');
-    
-    // If using a template but sheets don't exist, create them
-    if (!summarySheet) {
-      console.log('Creating Summary worksheet');
-      summarySheet = workbook.addWorksheet('Summary');
-    }
-    
-    if (!expensesSheet) {
-      console.log('Creating Expenses worksheet');
-      expensesSheet = workbook.addWorksheet('Expenses');
-    }
-    
-    if (!mileageSheet) {
-      console.log('Creating Mileage worksheet');
-      mileageSheet = workbook.addWorksheet('Mileage');
-    }
-    
-    // Clear sheets carefully - only remove content, not the sheet itself
-    // Check if sheets have content before clearing
-    if (summarySheet.rowCount > 0) {
-      console.log(`Clearing Summary sheet with ${summarySheet.rowCount} rows`);
-      summarySheet.spliceRows(1, summarySheet.rowCount);
-    }
-    
-    if (expensesSheet.rowCount > 0) {
-      console.log(`Clearing Expenses sheet with ${expensesSheet.rowCount} rows`);
-      expensesSheet.spliceRows(1, expensesSheet.rowCount);
-    }
-    
-    if (mileageSheet.rowCount > 0) {
-      console.log(`Clearing Mileage sheet with ${mileageSheet.rowCount} rows`);
-      mileageSheet.spliceRows(1, mileageSheet.rowCount);
+    // Initialize worksheet variables
+    let summarySheet = null;
+    let expensesSheet = null;
+    let mileageSheet = null;
+
+    // Special handling for templates
+    if (isUsingTemplate) {
+        console.log('Using template workbook, finding worksheets to use');
+        
+        // Find the most appropriate sheets to use in the template
+        // For a template, we want to be more flexible and use whatever sheets are there
+        const worksheets = workbook.worksheets;
+        console.log(`Template has ${worksheets.length} worksheets`);
+        
+        // First, try to find exact matches
+        summarySheet = workbook.getWorksheet('Summary') || workbook.getWorksheet('Trip Summary');
+        expensesSheet = workbook.getWorksheet('Expenses');
+        mileageSheet = workbook.getWorksheet('Mileage');
+        
+        // If not found, try to find containing these names
+        if (!summarySheet) {
+            for (const sheet of worksheets) {
+                if (sheet.name.toLowerCase().includes('summary') || 
+                    sheet.name.toLowerCase().includes('overview') ||
+                    sheet.name.toLowerCase().includes('report')) {
+                    summarySheet = sheet;
+                    console.log(`Found summary sheet: ${sheet.name}`);
+                    break;
+                }
+            }
+        }
+        
+        if (!expensesSheet) {
+            for (const sheet of worksheets) {
+                if (sheet.name.toLowerCase().includes('expense') || 
+                    sheet.name.toLowerCase().includes('cost') ||
+                    sheet.name.toLowerCase().includes('spend')) {
+                    expensesSheet = sheet;
+                    console.log(`Found expenses sheet: ${sheet.name}`);
+                    break;
+                }
+            }
+        }
+        
+        if (!mileageSheet) {
+            for (const sheet of worksheets) {
+                if (sheet.name.toLowerCase().includes('mile') || 
+                    sheet.name.toLowerCase().includes('travel') ||
+                    sheet.name.toLowerCase().includes('trip')) {
+                    mileageSheet = sheet;
+                    console.log(`Found mileage sheet: ${sheet.name}`);
+                    break;
+                }
+            }
+        }
+        
+        // If we still don't have our required sheets, use what we have or create new ones
+        if (!summarySheet && worksheets.length > 0) {
+            summarySheet = worksheets[0]; // Use the first sheet
+            console.log(`Using first sheet for summary: ${summarySheet.name}`);
+        } else if (!summarySheet) {
+            summarySheet = workbook.addWorksheet('Summary');
+            console.log('Created new Summary sheet');
+        }
+        
+        if (!expensesSheet && worksheets.length > 1) {
+            expensesSheet = worksheets[1]; // Use the second sheet
+            console.log(`Using second sheet for expenses: ${expensesSheet.name}`);
+        } else if (!expensesSheet) {
+            expensesSheet = workbook.addWorksheet('Expenses');
+            console.log('Created new Expenses sheet');
+        }
+        
+        if (!mileageSheet && worksheets.length > 2) {
+            mileageSheet = worksheets[2]; // Use the third sheet
+            console.log(`Using third sheet for mileage: ${mileageSheet.name}`);
+        } else if (!mileageSheet) {
+            mileageSheet = workbook.addWorksheet('Mileage');
+            console.log('Created new Mileage sheet');
+        }
+        
+        // Now clear the content but preserve any custom formatting
+        if (summarySheet.rowCount > 0) {
+            // Keep the first row (headers) if it exists and looks like headers
+            const firstRowValues = summarySheet.getRow(1).values;
+            const hasHeaders = firstRowValues && firstRowValues.length > 1;
+            
+            if (hasHeaders) {
+                console.log(`Preserving header in ${summarySheet.name} and clearing ${summarySheet.rowCount-1} data rows`);
+                if (summarySheet.rowCount > 1) {
+                    summarySheet.spliceRows(2, summarySheet.rowCount - 1);
+                }
+            } else {
+                console.log(`Clearing all ${summarySheet.rowCount} rows in ${summarySheet.name}`);
+                summarySheet.spliceRows(1, summarySheet.rowCount);
+            }
+        }
+        
+        if (expensesSheet.rowCount > 0) {
+            // Keep the first row (headers) if it exists and looks like headers
+            const firstRowValues = expensesSheet.getRow(1).values;
+            const hasHeaders = firstRowValues && firstRowValues.length > 1;
+            
+            if (hasHeaders) {
+                console.log(`Preserving header in ${expensesSheet.name} and clearing ${expensesSheet.rowCount-1} data rows`);
+                if (expensesSheet.rowCount > 1) {
+                    expensesSheet.spliceRows(2, expensesSheet.rowCount - 1);
+                }
+            } else {
+                console.log(`Clearing all ${expensesSheet.rowCount} rows in ${expensesSheet.name}`);
+                expensesSheet.spliceRows(1, expensesSheet.rowCount);
+            }
+        }
+        
+        if (mileageSheet.rowCount > 0) {
+            // Keep the first row (headers) if it exists and looks like headers
+            const firstRowValues = mileageSheet.getRow(1).values;
+            const hasHeaders = firstRowValues && firstRowValues.length > 1;
+            
+            if (hasHeaders) {
+                console.log(`Preserving header in ${mileageSheet.name} and clearing ${mileageSheet.rowCount-1} data rows`);
+                if (mileageSheet.rowCount > 1) {
+                    mileageSheet.spliceRows(2, mileageSheet.rowCount - 1);
+                }
+            } else {
+                console.log(`Clearing all ${mileageSheet.rowCount} rows in ${mileageSheet.name}`);
+                mileageSheet.spliceRows(1, mileageSheet.rowCount);
+            }
+        }
+    } else {
+        // Regular approach for non-templates
+        console.log('Using standard workbook, setting up worksheets');
+        
+        // Get worksheets (or create them if they don't exist)
+        summarySheet = workbook.getWorksheet('Summary') || workbook.getWorksheet('Trip Summary');
+        expensesSheet = workbook.getWorksheet('Expenses');
+        mileageSheet = workbook.getWorksheet('Mileage');
+        
+        // If sheets don't exist, create them
+        if (!summarySheet) {
+            console.log('Creating Summary worksheet');
+            summarySheet = workbook.addWorksheet('Summary');
+        }
+        
+        if (!expensesSheet) {
+            console.log('Creating Expenses worksheet');
+            expensesSheet = workbook.addWorksheet('Expenses');
+        }
+        
+        if (!mileageSheet) {
+            console.log('Creating Mileage worksheet');
+            mileageSheet = workbook.addWorksheet('Mileage');
+        }
+        
+        // Clear sheets
+        if (summarySheet.rowCount > 0) {
+            console.log(`Clearing Summary sheet with ${summarySheet.rowCount} rows`);
+            summarySheet.spliceRows(1, summarySheet.rowCount);
+        }
+        
+        if (expensesSheet.rowCount > 0) {
+            console.log(`Clearing Expenses sheet with ${expensesSheet.rowCount} rows`);
+            expensesSheet.spliceRows(1, expensesSheet.rowCount);
+        }
+        
+        if (mileageSheet.rowCount > 0) {
+            console.log(`Clearing Mileage sheet with ${mileageSheet.rowCount} rows`);
+            mileageSheet.spliceRows(1, mileageSheet.rowCount);
+        }
     }
     
     // Setup Summary sheet
