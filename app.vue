@@ -11,87 +11,8 @@
 // Import animations
 import '~/assets/css/animations.css';
 
-// Global auth state initialization
-import { useUserStore } from '~/stores/userStore';
-import { useSupabaseClient, onMounted, onUnmounted } from '#imports';
-
-const supabase = useSupabaseClient();
-const userStore = useUserStore();
-
-// Initialize auth state on app load
-const initAuth = async () => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session) {
-      console.log('Session found on app load, initializing user profile');
-      // Save session to localStorage for better persistence
-      localStorage.setItem('supabase-auth-token', JSON.stringify(session));
-      await userStore.fetchProfile();
-    } else {
-      // Try to recover session from localStorage if available
-      const savedSession = localStorage.getItem('supabase-auth-token');
-      if (savedSession) {
-        try {
-          console.log('Found saved session in localStorage, attempting to restore');
-          const parsedSession = JSON.parse(savedSession);
-          
-          // Set session data
-          const { data, error } = await supabase.auth.setSession({
-            access_token: parsedSession.access_token,
-            refresh_token: parsedSession.refresh_token
-          });
-          
-          if (error) {
-            console.error('Failed to restore session:', error);
-            localStorage.removeItem('supabase-auth-token');
-          } else if (data.session) {
-            console.log('Session restored successfully');
-            await userStore.fetchProfile();
-          }
-        } catch (e) {
-          console.error('Error parsing saved session:', e);
-          localStorage.removeItem('supabase-auth-token');
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error initializing auth state:', error);
-  }
-};
-
-// Run once on app mount
-onMounted(() => {
-  initAuth();
-  
-  // Set up auth state change listener
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-    console.log('Auth state changed:', event);
-    
-    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-      if (session) {
-        // Wait a short time to ensure auth state is fully propagated
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        try {
-          // Use the same Supabase client instance to ensure auth state consistency
-          await userStore.fetchProfile(supabase);
-        } catch (error) {
-          console.error('Error fetching profile on auth change:', error);
-        }
-      }
-    }
-    
-    if (event === 'SIGNED_OUT') {
-      userStore.resetState();
-    }
-  });
-  
-  // Clean up subscription on unmount
-  onUnmounted(() => {
-    subscription.unsubscribe();
-  });
-});
+// Import animations only
+import { useRouter, onMounted } from '#imports';
 
 // Auth middleware is applied through the Nuxt configuration
 </script>

@@ -271,11 +271,8 @@ const handleLogin = async () => {
     
     console.log('Login successful, user:', user.id);
     
-    // Ensure session is stored properly
-    localStorage.setItem('supabase-auth-token', JSON.stringify(session));
-    
     // Wait a moment for the auth state to fully propagate
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     try {
       // Fetch or create profile with the same Supabase client to ensure auth state is consistent

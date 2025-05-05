@@ -2,12 +2,12 @@
 import { useUserStore } from '~/stores/userStore';
 
 export default defineNuxtRouteMiddleware(async (to, from) => {
-  // Skip middleware for auth pages
+  // Skip middleware for auth pages and home
   if (to.path.startsWith('/auth') || to.path === '/') {
     return;
   }
   
-  // Skip for server-side rendering
+  // Skip for server-side rendering to avoid hydration issues
   if (process.server) {
     return;
   }
@@ -16,7 +16,13 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   const userStore = useUserStore();
   
   try {
-    // Check if session exists
+    // First check if we have a profile already loaded in the store
+    // which indicates a valid session from a previous check
+    if (userStore.profile) {
+      return; // User is already authenticated
+    }
+
+    // Otherwise, check if a session exists
     const { data: { session }, error } = await supabase.auth.getSession();
     
     if (error) {
@@ -29,16 +35,31 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
       return navigateTo('/auth/login');
     }
     
-    // Session exists, check if profile is loaded
-    if (!userStore.profile) {
-      console.log('Session exists but no profile loaded, fetching profile');
+    // Attempt to refresh token if it exists but might be about to expire
+    const expiresAt = session.expires_at;
+    const now = Math.floor(Date.now() / 1000);
+    const tenMinutesInSeconds = 10 * 60;
+    
+    if (expiresAt && (expiresAt - now < tenMinutesInSeconds)) {
+      console.log('Session token close to expiry, refreshing...');
       try {
-        await userStore.fetchProfile(supabase);
-        console.log('Profile loaded in middleware');
-      } catch (profileError) {
-        console.error('Error fetching profile in middleware:', profileError);
-        return navigateTo('/auth/login');
+        const { data, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          console.error('Error refreshing token:', refreshError);
+          return navigateTo('/auth/login');
+        }
+      } catch (refreshError) {
+        console.error('Exception during token refresh:', refreshError);
       }
+    }
+    
+    // Session exists but no profile, fetch it now
+    try {
+      await userStore.fetchProfile(supabase);
+      console.log('Profile loaded in middleware');
+    } catch (profileError) {
+      console.error('Error fetching profile in middleware:', profileError);
+      return navigateTo('/auth/login');
     }
   } catch (err) {
     console.error('Unexpected error in auth middleware:', err);

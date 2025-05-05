@@ -51,6 +51,7 @@ export default defineNuxtConfig({
         persistSession: true,
         autoRefreshToken: true,
         storageKey: 'supabase-auth',
+        storage: process.client ? localStorage : undefined,
       }
     }
   },

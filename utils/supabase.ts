@@ -5,7 +5,22 @@ import { useRuntimeConfig } from '#app';
  * Create a Supabase client with the credentials from the environment
  * Use this client for custom operations not handled by the Nuxt Supabase module
  */
+/**
+ * Get the existing Supabase client from Nuxt if possible,
+ * or create a new one with matching configuration if necessary
+ */
 export const createSupabaseClient = () => {
+  try {
+    // Try to use the existing Nuxt Supabase client to avoid multiple instances
+    const existingClient = useSupabaseClient();
+    if (existingClient) {
+      return existingClient;
+    }
+  } catch (error) {
+    console.warn('Could not get existing Supabase client, creating a new one');
+  }
+  
+  // Create new client only as fallback
   const config = useRuntimeConfig();
   
   return createClient(
@@ -16,7 +31,7 @@ export const createSupabaseClient = () => {
         persistSession: true,
         autoRefreshToken: true,
         storageKey: 'supabase-auth',
-        storage: localStorage,
+        storage: typeof window !== 'undefined' ? localStorage : undefined,
       },
       realtime: {
         params: {
