@@ -220,7 +220,6 @@
 import { ref } from 'vue';
 import { useSupabaseClient, navigateTo } from '#imports';
 import { useUserStore } from '~/stores/userStore';
-import { safeStorage } from '~/utils/hydration-helpers';
 
 const supabase = useSupabaseClient();
 const userStore = useUserStore();
@@ -272,8 +271,8 @@ const handleLogin = async () => {
     
     console.log('Login successful, user:', user.id);
     
-    // Explicitly save session using our safe storage helpers
-    safeStorage.setItem('supabase-auth', JSON.stringify({
+    // Save the session token (already done by Supabase, but let's ensure it)
+    localStorage.setItem('supabase-auth', JSON.stringify({
       access_token: session.access_token,
       refresh_token: session.refresh_token,
       expires_at: session.expires_at,
@@ -287,8 +286,8 @@ const handleLogin = async () => {
       // Fetch or create profile with the same Supabase client to ensure auth state is consistent
       await userStore.fetchProfile(supabase);
       console.log('Profile loaded successfully');
-      // Use our intermediate redirection page for maximum reliability
-      window.location.href = '/to-dashboard.html';
+      // Use simple direct navigation - most reliable approach
+      window.location.href = '/dashboard';
     } catch (profileError: any) {
       console.error('Error loading profile:', profileError);
       error.value = 'Login successful but failed to load profile. Please try again.';

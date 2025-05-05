@@ -5,9 +5,6 @@ import { useRuntimeConfig } from '#app';
  * Create a Supabase client with the credentials from the environment
  * Use this client for custom operations not handled by the Nuxt Supabase module
  */
-// Import our safe storage helper
-import { safeStorage } from '~/utils/hydration-helpers';
-
 /**
  * Get the existing Supabase client from Nuxt if possible,
  * or create a new one with matching configuration if necessary
@@ -26,7 +23,6 @@ export const createSupabaseClient = () => {
   // Create new client only as fallback
   const config = useRuntimeConfig();
   
-  // Use our safe storage implementation
   return createClient(
     config.public.supabaseUrl,
     config.public.supabaseKey,
@@ -35,17 +31,11 @@ export const createSupabaseClient = () => {
         persistSession: true,
         autoRefreshToken: true,
         storageKey: 'supabase-auth',
-        storage: typeof window !== 'undefined' ? safeStorage : undefined,
-        detectSessionInUrl: false, // Avoid URL parsing for better CSP compliance
+        storage: typeof window !== 'undefined' ? localStorage : undefined,
       },
       realtime: {
         params: {
           eventsPerSecond: 10,
-        },
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'supabase-js-browser', // Add a client identifier
         },
       },
     }

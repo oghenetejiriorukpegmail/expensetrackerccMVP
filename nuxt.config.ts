@@ -10,12 +10,9 @@ export default defineNuxtConfig({
   pages: true,
   router: {
     options: {
-      strict: false,
-      hashMode: false,
-      trailingSlash: false
+      strict: false
     }
   },
-  ssr: false, // Disable server-side rendering to avoid hydration issues
   nitro: {
     preset: process.env.NITRO_PRESET || 'netlify',
     static: true

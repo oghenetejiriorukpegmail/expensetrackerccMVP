@@ -11,72 +11,9 @@
 // Import animations
 import '~/assets/css/animations.css';
 
-// Import hydration helpers
-import { runAfterHydration } from '~/utils/hydration-helpers';
-import { defineNuxtPlugin } from '#imports';
-
-// Handle lockdown CSP and hydration
+// Simple client-side initialization
 if (process.client) {
-  // Wait until after hydration to run any browser-specific code
-  runAfterHydration(() => {
-    console.log('Running post-hydration initialization');
-
-    // Define a meta tag to attempt to handle CSP issues
-    if (typeof document !== 'undefined') {
-      // Add a meta tag to handle lockdown CSP issues
-      const metaTag = document.createElement('meta');
-      metaTag.httpEquiv = 'Content-Security-Policy';
-      metaTag.content = "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; connect-src 'self' *;";
-      document.head.appendChild(metaTag);
-      
-      // Fix all links to improve navigation reliability
-      const fixNavigation = () => {
-        // Fix dashboard links
-        const dashboardLinks = document.querySelectorAll('a[href="/dashboard"]');
-        dashboardLinks.forEach(link => {
-          link.addEventListener('click', (e) => {
-            e.preventDefault();
-            window.location.href = '/dashboard';
-          });
-        });
-        
-        // Fix NuxtLink components that might be causing issues
-        document.querySelectorAll('a[href^="/"]').forEach(link => {
-          // Don't modify links that already have event listeners
-          if (!(link as any).__navFixed) {
-            // Mark as fixed to avoid duplicating
-            (link as any).__navFixed = true;
-            
-            // Original href
-            const href = link.getAttribute('href');
-            if (!href) return;
-            
-            link.addEventListener('click', (e) => {
-              // Special handling for certain paths
-              if (href === '/dashboard' || href.startsWith('/trips') || 
-                  href.startsWith('/expenses') || href.startsWith('/reports')) {
-                e.preventDefault();
-                window.location.href = href;
-              }
-            });
-          }
-        });
-      };
-      
-      // Run immediately and also set up a mutation observer for dynamically added links
-      fixNavigation();
-      
-      // Add an observer to catch new links
-      const observer = new MutationObserver(() => {
-        fixNavigation();
-      });
-      
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
-    }
-  });
+  console.log('App initializing in client mode');
 }
 
 // Auth middleware is applied through the Nuxt configuration
