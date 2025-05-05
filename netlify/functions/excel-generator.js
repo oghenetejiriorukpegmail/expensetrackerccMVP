@@ -221,24 +221,59 @@ exports.handler = async (event, context) => {
     }
     
     // Get worksheets (or create them if they don't exist)
-    const summarySheet = workbook.getWorksheet('Summary') || workbook.getWorksheet('Trip Summary') || workbook.addWorksheet('Summary');
-    const expensesSheet = workbook.getWorksheet('Expenses') || workbook.addWorksheet('Expenses');
-    const mileageSheet = workbook.getWorksheet('Mileage') || workbook.addWorksheet('Mileage');
+    let summarySheet = workbook.getWorksheet('Summary') || workbook.getWorksheet('Trip Summary');
+    let expensesSheet = workbook.getWorksheet('Expenses');
+    let mileageSheet = workbook.getWorksheet('Mileage');
     
-    // Clear sheets in case we're using a template
-    summarySheet.spliceRows(1, summarySheet.rowCount);
-    expensesSheet.spliceRows(1, expensesSheet.rowCount);
-    mileageSheet.spliceRows(1, mileageSheet.rowCount);
+    // If using a template but sheets don't exist, create them
+    if (!summarySheet) {
+      console.log('Creating Summary worksheet');
+      summarySheet = workbook.addWorksheet('Summary');
+    }
+    
+    if (!expensesSheet) {
+      console.log('Creating Expenses worksheet');
+      expensesSheet = workbook.addWorksheet('Expenses');
+    }
+    
+    if (!mileageSheet) {
+      console.log('Creating Mileage worksheet');
+      mileageSheet = workbook.addWorksheet('Mileage');
+    }
+    
+    // Clear sheets carefully - only remove content, not the sheet itself
+    // Check if sheets have content before clearing
+    if (summarySheet.rowCount > 0) {
+      console.log(`Clearing Summary sheet with ${summarySheet.rowCount} rows`);
+      summarySheet.spliceRows(1, summarySheet.rowCount);
+    }
+    
+    if (expensesSheet.rowCount > 0) {
+      console.log(`Clearing Expenses sheet with ${expensesSheet.rowCount} rows`);
+      expensesSheet.spliceRows(1, expensesSheet.rowCount);
+    }
+    
+    if (mileageSheet.rowCount > 0) {
+      console.log(`Clearing Mileage sheet with ${mileageSheet.rowCount} rows`);
+      mileageSheet.spliceRows(1, mileageSheet.rowCount);
+    }
     
     // Setup Summary sheet
+    console.log('Setting up Summary sheet columns');
     summarySheet.columns = [
       { header: 'Description', key: 'description', width: 30 },
       { header: 'Value', key: 'value', width: 30 },
     ];
     
-    // Add report title
-    summarySheet.addRow({ description: 'Report', value: reportTitle });
-    summarySheet.addRow({ description: 'Generated Date', value: new Date().toISOString().split('T')[0] });
+    // Add report title - double check we're adding rows correctly
+    console.log('Adding data to Summary sheet');
+    const titleRow = summarySheet.addRow({ description: 'Report', value: reportTitle });
+    const dateRow = summarySheet.addRow({ description: 'Generated Date', value: new Date().toISOString().split('T')[0] });
+    
+    // Verify rows were added
+    console.log(`Added row count: ${summarySheet.rowCount}`);
+    console.log(`Row 1 data: ${JSON.stringify(summarySheet.getRow(1).values)}`);
+    console.log(`Row 2 data: ${JSON.stringify(summarySheet.getRow(2).values)}`);
     
     // Add trip details if available
     if (tripData) {
@@ -307,6 +342,7 @@ exports.handler = async (event, context) => {
     totalRow.font = { bold: true };
     
     // Fill expenses sheet
+    console.log('Setting up Expenses sheet columns');
     expensesSheet.columns = [
       { header: 'Date', key: 'date', width: 15 },
       { header: 'Type', key: 'type', width: 20 },
@@ -317,6 +353,10 @@ exports.handler = async (event, context) => {
       { header: 'Location', key: 'location', width: 25 },
       { header: 'Trip', key: 'tripName', width: 25 },
     ];
+    
+    // Add header row explicitly to ensure it's present
+    console.log('Adding header row to Expenses sheet');
+    expensesSheet.addRow(['Date', 'Type', 'Vendor', 'Description', 'Amount', 'Currency', 'Location', 'Trip']);
     
     // If we're not filtering by trip, also fetch trip names for each expense
     let expenseTrips = {};
@@ -336,18 +376,29 @@ exports.handler = async (event, context) => {
     }
     
     // Add expenses to the sheet
-    expenses.forEach(expense => {
-      expensesSheet.addRow({
-        date: expense.date,
-        type: expense.expense_type,
-        vendor: expense.vendor || '',
-        description: expense.description || '',
-        amount: parseFloat(expense.amount),
-        currency: expense.currency,
-        location: expense.location || '',
-        tripName: tripId ? tripData.name : (expenseTrips[expense.trip_id] || ''),
-      });
-    });
+    console.log(`Adding ${expenses.length} expenses to the Expenses sheet`);
+    for (let i = 0; i < expenses.length; i++) {
+      const expense = expenses[i];
+      try {
+        // Create a safe row object with well-defined values
+        const rowData = {
+          date: expense.date || new Date().toISOString().split('T')[0],
+          type: expense.expense_type || 'other',
+          vendor: expense.vendor || '',
+          description: expense.description || '',
+          amount: expense.amount ? parseFloat(expense.amount) : 0,
+          currency: expense.currency || 'USD',
+          location: expense.location || '',
+          tripName: tripId ? tripData.name : (expenseTrips[expense.trip_id] || ''),
+        };
+        
+        // Add row and log
+        const addedRow = expensesSheet.addRow(rowData);
+        console.log(`Added expense ${i+1}/${expenses.length}`);
+      } catch (err) {
+        console.error(`Error adding expense row ${i+1}:`, err);
+      }
+    }
     
     // Format amounts as currency
     expensesSheet.getColumn('amount').numFmt = '$#,##0.00';
@@ -357,6 +408,7 @@ exports.handler = async (event, context) => {
     expensesHeaderRow.font = { bold: true };
     
     // Fill mileage sheet
+    console.log('Setting up Mileage sheet columns');
     mileageSheet.columns = [
       { header: 'Date', key: 'date', width: 15 },
       { header: 'Start Odometer', key: 'startOdometer', width: 15 },
@@ -366,6 +418,10 @@ exports.handler = async (event, context) => {
       { header: 'Cost', key: 'cost', width: 15 },
       { header: 'Trip', key: 'tripName', width: 25 },
     ];
+    
+    // Add header row explicitly to ensure it's present
+    console.log('Adding header row to Mileage sheet');
+    mileageSheet.addRow(['Date', 'Start Odometer', 'End Odometer', 'Distance (miles)', 'Purpose', 'Cost', 'Trip']);
     
     // If we're not filtering by trip, also fetch trip names for each mileage record
     let mileageTrips = {};
@@ -385,20 +441,34 @@ exports.handler = async (event, context) => {
     }
     
     // Add mileage records to the sheet
-    mileageRecords.forEach(record => {
-      const distance = parseFloat(record.distance);
-      const cost = distance * mileageRate;
-      
-      mileageSheet.addRow({
-        date: record.date,
-        startOdometer: parseFloat(record.start_odometer),
-        endOdometer: parseFloat(record.end_odometer),
-        distance: distance,
-        purpose: record.purpose || '',
-        cost: cost,
-        tripName: tripId ? tripData.name : (mileageTrips[record.trip_id] || ''),
-      });
-    });
+    console.log(`Adding ${mileageRecords.length} mileage records to the Mileage sheet`);
+    for (let i = 0; i < mileageRecords.length; i++) {
+      const record = mileageRecords[i];
+      try {
+        // Parse values safely, defaulting to 0 if NaN
+        const startOdometer = record.start_odometer ? parseFloat(record.start_odometer) : 0;
+        const endOdometer = record.end_odometer ? parseFloat(record.end_odometer) : 0;
+        const distance = record.distance ? parseFloat(record.distance) : (endOdometer - startOdometer);
+        const cost = distance * mileageRate;
+        
+        // Create a safe row object with well-defined values
+        const rowData = {
+          date: record.date || new Date().toISOString().split('T')[0],
+          startOdometer: startOdometer,
+          endOdometer: endOdometer,
+          distance: distance,
+          purpose: record.purpose || '',
+          cost: cost,
+          tripName: tripId ? tripData.name : (mileageTrips[record.trip_id] || ''),
+        };
+        
+        // Add row and log
+        const addedRow = mileageSheet.addRow(rowData);
+        console.log(`Added mileage record ${i+1}/${mileageRecords.length}`);
+      } catch (err) {
+        console.error(`Error adding mileage row ${i+1}:`, err);
+      }
+    }
     
     // Format mileage cost as currency
     mileageSheet.getColumn('cost').numFmt = '$#,##0.00';
@@ -408,18 +478,36 @@ exports.handler = async (event, context) => {
     mileageHeaderRow.font = { bold: true };
     
     // Generate Excel buffer
-    const buffer = await workbook.xlsx.writeBuffer();
-    
-    // Return the Excel file
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${filename}.xlsx"`,
-      },
-      body: buffer.toString('base64'),
-      isBase64Encoded: true,
-    };
+    console.log('Generating Excel buffer...');
+    try {
+      // Check if sheets have data
+      console.log(`Sheets summary: Summary (${summarySheet.rowCount} rows), Expenses (${expensesSheet.rowCount} rows), Mileage (${mileageSheet.rowCount} rows)`);
+      
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+      console.log(`Generated Excel buffer of size: ${buffer.byteLength} bytes`);
+      
+      if (!buffer || buffer.byteLength === 0) {
+        throw new Error('Generated Excel buffer is empty');
+      }
+      
+      // Return the Excel file
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}.xlsx"`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        },
+        body: buffer.toString('base64'),
+        isBase64Encoded: true,
+      };
+    } catch (err) {
+      console.error('Error generating Excel buffer:', err);
+      throw new Error(`Failed to generate Excel file: ${err.message}`);
+    }
   } catch (error) {
     console.error('Error generating Excel file:', error);
     return {
