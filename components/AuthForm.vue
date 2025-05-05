@@ -331,9 +331,14 @@ const handleGoogleLogin = async () => {
   loading.value = true;
   
   try {
-    // Use the production URL for the redirect
-    // In development, this will be updated automatically by Supabase
-    const redirectUrl = 'https://expensetrackermvp.netlify.app/dashboard';
+    // Set redirect URL based on environment
+    let redirectUrl;
+    if (process.env.NODE_ENV === 'production') {
+      redirectUrl = 'https://expensetrackermvp.netlify.app/dashboard';
+    } else {
+      // In development, use relative URL which will be resolved correctly by Supabase
+      redirectUrl = '/dashboard';
+    }
     
     console.log('Starting Google OAuth flow with redirect to:', redirectUrl);
     
@@ -344,7 +349,8 @@ const handleGoogleLogin = async () => {
         queryParams: {
           access_type: 'offline',
           prompt: 'consent'
-        }
+        },
+        skipBrowserRedirect: false // Ensure browser is redirected after successful authentication
       }
     });
     

@@ -76,6 +76,18 @@ export default defineNuxtPlugin((nuxtApp) => {
             // If signed in with OAuth provider, we need to ensure the profile is created
             console.log('User signed in, updating profile');
             await userStore.fetchProfile(supabase);
+            
+            // Check if this is an OAuth redirect
+            const url = new URL(window.location.href);
+            const hasAuthParams = url.hash.includes('access_token') || 
+                                url.searchParams.has('access_token') || 
+                                url.searchParams.has('code');
+            
+            // If we detect OAuth parameters and user is authenticated but not on dashboard
+            if (hasAuthParams && !window.location.pathname.includes('/dashboard')) {
+              console.log('Detected OAuth redirect, navigating to dashboard');
+              window.location.href = '/dashboard';
+            }
           }
         } else if (event === 'SIGNED_OUT') {
           // Clear user state
