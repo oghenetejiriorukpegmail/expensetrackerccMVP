@@ -1,8 +1,11 @@
 // Auth session helper plugin
 import { safeStorage } from '~/utils/hydration-helpers';
+import { useUserStore } from '~/stores/userStore';
 
 export default defineNuxtPlugin((nuxtApp) => {
   if (process.client) {
+    const userStore = useUserStore();
+    
     // Initialize session refresher - no longer using global middleware
     const refreshSession = async () => {
       try {
@@ -43,6 +46,12 @@ export default defineNuxtPlugin((nuxtApp) => {
               }
             }
           }
+          
+          // Always make sure the profile is loaded after session changes
+          if (!userStore.profile) {
+            console.log('Loading user profile after session refresh');
+            await userStore.fetchProfile(supabase);
+          }
         }
       } catch (err) {
         console.error('Error in session refresh:', err);
@@ -55,9 +64,30 @@ export default defineNuxtPlugin((nuxtApp) => {
     // Set up interval to check and refresh session
     const refreshInterval = setInterval(refreshSession, 5 * 60 * 1000); // Every 5 minutes
     
-    // Clean up interval on app unmount
+    const supabase = useSupabaseClient();
+    
+    // Handle auth state changes (especially for OAuth callbacks)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event);
+        
+        if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+          if (session) {
+            // If signed in with OAuth provider, we need to ensure the profile is created
+            console.log('User signed in, updating profile');
+            await userStore.fetchProfile(supabase);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          // Clear user state
+          userStore.resetState();
+        }
+      }
+    );
+    
+    // Clean up on app unmount
     nuxtApp.hook('app:unmounted', () => {
       clearInterval(refreshInterval);
+      subscription.unsubscribe();
     });
   }
 });

@@ -93,13 +93,30 @@ export const useUserStore = defineStore('user', {
         // Create a new client if none is provided
         const client = supabaseClient || createSupabaseClient();
         
+        // Extract user information - handles both email/password and OAuth providers
+        let fullName = '';
+        
+        // Check different metadata locations based on provider
+        if (user.user_metadata?.full_name) {
+          // For email/password signup where we set full_name in the metadata
+          fullName = user.user_metadata.full_name;
+        } else if (user.user_metadata?.name) {
+          // For Google OAuth which provides name
+          fullName = user.user_metadata.name;
+        } else if (user.app_metadata?.provider === 'google' && user.user_metadata) {
+          // Alternate location for Google auth data
+          fullName = user.user_metadata.name || user.user_metadata.full_name || '';
+        }
+        
+        console.log('Creating profile with name:', fullName);
+        
         // Create profile
         const { data: profileData, error: profileError } = await client
           .from('profiles')
           .insert({
             id: user.id,
             email: user.email,
-            full_name: user.user_metadata?.full_name || ''
+            full_name: fullName
           })
           .select()
           .single();
