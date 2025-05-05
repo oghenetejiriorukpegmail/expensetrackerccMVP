@@ -194,7 +194,7 @@ const getTripTotalMileage = (tripId) => {
 
 // Event handlers
 const editTrip = (trip) => {
-  navigateTo(`/trips/${trip.id}/edit`);
+  navigateTo(`/trips/edit/${trip.id}`);
 };
 
 const confirmDeleteTrip = (trip) => {
