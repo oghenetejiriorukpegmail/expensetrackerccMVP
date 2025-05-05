@@ -54,22 +54,40 @@ exports.handler = async (event, context) => {
     let mimeType = 'image/jpeg';  // Default MIME type
     let originalImageFormat = 'unknown';
     let originalDataLength = imageData.length;
+    let isPDF = false;
     
-    // Check if the image contains a data URL prefix
+    // Check if the content has a data URL prefix
     if (imageData.startsWith('data:')) {
-      console.log('Content has data URL prefix, extracting base64 content');
+      console.log('Content has data URL prefix, extracting info');
       // Extract mime type from the data URL
       const matches = imageData.match(/^data:([^;]+);base64,/);
       if (matches && matches.length > 1) {
-        mimeType = matches[1];
+        mimeType = matches[1].toLowerCase();
         originalImageFormat = mimeType.split('/')[1] || 'unknown';
         console.log(`Detected MIME type from prefix: ${mimeType}, format: ${originalImageFormat}`);
         
-        // Special handling for PDFs - maintain PDF MIME type if detected
-        if (mimeType.toLowerCase() === 'application/pdf' || originalImageFormat.toLowerCase() === 'pdf') {
+        // Check if this is a PDF specifically
+        if (mimeType === 'application/pdf' || originalImageFormat === 'pdf') {
           console.log('PDF document detected, using application/pdf MIME type');
           mimeType = 'application/pdf';
           originalImageFormat = 'pdf';
+          isPDF = true;
+        }
+        
+        // Try to detect PDF content based on signature
+        if (!isPDF && imageData.length > 100) {
+          // Look for PDF signature in the Base64 header
+          // %PDF- in base64 often starts with "JVBER" or similar patterns
+          const sampleHeader = imageData.substring(0, 100);
+          if (sampleHeader.includes('JVBER') || 
+              sampleHeader.includes('JVBERi0') || 
+              sampleHeader.startsWith('0M8R') ||  // PDF artifact
+              mimeType.includes('pdf')) {
+            console.log('PDF content detected based on signature, using application/pdf MIME type');
+            mimeType = 'application/pdf';
+            originalImageFormat = 'pdf';
+            isPDF = true;
+          }
         }
       }
       
@@ -78,8 +96,24 @@ exports.handler = async (event, context) => {
       console.log(`Extracted base64 data of length: ${imageData.length}`);
     }
     
+    // Check for PDF header in binary content (additional detection layer)
+    if (!isPDF && imageData.length > 10) {
+      try {
+        // Decode a small portion to check for PDF signature
+        const headerBytes = Buffer.from(imageData.substring(0, 30), 'base64').toString();
+        if (headerBytes.startsWith('%PDF-') || headerBytes.includes('%PDF-')) {
+          console.log('PDF content detected from content header');
+          mimeType = 'application/pdf';
+          originalImageFormat = 'pdf';
+          isPDF = true;
+        }
+      } catch (e) {
+        console.log('Could not inspect content header, continuing with detected mime type');
+      }
+    }
+    
     // For images (non-PDFs), use a reliable MIME type
-    if (mimeType !== 'application/pdf') {
+    if (!isPDF && mimeType !== 'application/pdf') {
       // Improve compatibility by using a standard image format
       console.log('Using standardized image MIME type for Document AI compatibility');
       mimeType = 'image/png';
@@ -323,9 +357,28 @@ exports.handler = async (event, context) => {
         if (invalidImageError) {
           console.log('Providing fallback receipt data for invalid image content error');
           
+          // Try to determine if this is a format issue
+          let detailedReason = "Document AI could not process the content";
+          let vendorName = "Unknown Vendor";
+          
+          // Provide specific information based on detected format
+          if (isPDF) {
+            detailedReason = "Document AI could not process this PDF. It may be encrypted, damaged, or in an unsupported format.";
+            vendorName = "PDF Receipt";
+          } else if (originalImageFormat === 'unknown') {
+            detailedReason = "The uploaded file couldn't be processed. Please try a different image format like JPG or PNG.";
+            vendorName = "Receipt";
+          } else if (originalImageFormat === 'png' || originalImageFormat === 'jpeg' || originalImageFormat === 'jpg') {
+            detailedReason = `The ${originalImageFormat.toUpperCase()} image couldn't be processed. Try a clearer image or a different format.`;
+            vendorName = `${originalImageFormat.toUpperCase()} Receipt`;
+          } else {
+            detailedReason = `The ${originalImageFormat} format is not well supported. Try converting to JPG or PNG.`;
+            vendorName = `${originalImageFormat} Receipt`;
+          }
+          
           // Create a more informative fallback receipt response
           const fallbackReceipt = {
-            vendor: 'Unknown Vendor',
+            vendor: vendorName,
             amount: 0,
             date: new Date().toISOString().split('T')[0],
             confidence: 0.1,
@@ -336,11 +389,13 @@ exports.handler = async (event, context) => {
             total: 0,
             taxAmount: 0,
             _fallback: true,
-            _fallbackReason: `Invalid image content - Document AI could not process the image. Format: ${originalImageFormat}, MIME: ${mimeType}, Size: ${imageData.length} chars`,
+            _fallbackReason: detailedReason,
+            _userMessage: "The receipt couldn't be automatically processed. Please enter the details manually.",
             _technicalDetails: {
               error: 'INVALID_IMAGE_CONTENT',
               imageFormat: originalImageFormat,
               mimeType: mimeType,
+              isPDF: isPDF,
               dataLength: imageData.length,
               timestamp: new Date().toISOString()
             }

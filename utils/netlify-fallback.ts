@@ -95,9 +95,17 @@ export async function processReceiptWithNetlifyFallback(
       
       // If it's the invalid image content error, provide a more informative UI message
       if (extractedData._technicalDetails.error === 'INVALID_IMAGE_CONTENT') {
-        // Add a more helpful message to the extracted data
-        extractedData.vendor = 'Receipt could not be processed';
-        extractedData._userMessage = 'The receipt image could not be processed automatically. Please fill in the details manually.';
+        // Use the specific error message if provided, otherwise use a generic message
+        if (!extractedData._userMessage) {
+          extractedData._userMessage = 'The receipt could not be processed automatically. Please fill in the details manually.';
+        }
+        
+        // If we detected it was a PDF specifically, include that in the vendor field
+        if (extractedData._technicalDetails.isPDF) {
+          extractedData.vendor = extractedData.vendor || 'PDF Receipt could not be processed';
+        } else {
+          extractedData.vendor = extractedData.vendor || 'Receipt could not be processed';
+        }
       }
     }
     
