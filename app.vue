@@ -28,6 +28,15 @@ if (process.client) {
       metaTag.httpEquiv = 'Content-Security-Policy';
       metaTag.content = "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; connect-src 'self' *;";
       document.head.appendChild(metaTag);
+      
+      // Fix direct links to dashboard
+      const dashboardLinks = document.querySelectorAll('a[href="/dashboard"]');
+      dashboardLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.href = '/dashboard';
+        });
+      });
     }
   });
 }

@@ -9,12 +9,12 @@
           Manage your business travel expenses efficiently
         </p>
         <div class="mt-8 flex justify-center space-x-4">
-          <NuxtLink
-            to="/dashboard"
+          <button
+            @click="navigateToDashboard"
             class="px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             Go to Dashboard
-          </NuxtLink>
+          </button>
           <NuxtLink
             to="/trips/new"
             class="px-6 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-primary-600 dark:text-primary-400 font-medium rounded-md shadow-sm border border-primary-300 dark:border-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -256,11 +256,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useSupabaseUser } from '#imports';
+import { useSupabaseUser, navigateTo } from '#imports';
 import { Trip, TripStatus, Expense, ExpenseType } from '~/types';
 import { useTripStore } from '~/stores/tripStore';
 import { useExpenseStore } from '~/stores/expenseStore';
 import { useMileageStore } from '~/stores/mileageStore';
+import { safeNavigate } from '~/utils/navigation-helpers';
 import dayjs from 'dayjs';
 
 const supabaseUser = useSupabaseUser();
@@ -406,6 +407,12 @@ onMounted(async () => {
 // Format date
 const formatDate = (dateString: string) => {
   return dayjs(dateString).format('MMM D, YYYY');
+};
+
+// Navigation handler for dashboard
+const navigateToDashboard = () => {
+  // Use our safe navigation helper
+  safeNavigate('/dashboard');
 };
 
 // Format currency
