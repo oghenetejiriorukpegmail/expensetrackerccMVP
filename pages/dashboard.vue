@@ -220,13 +220,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, defineComponent, nextTick } from 'vue';
 import { useSupabaseUser } from '#imports';
 import { useTripStore } from '~/stores/tripStore';
 import { useExpenseStore } from '~/stores/expenseStore';
 import { useMileageStore } from '~/stores/mileageStore';
 import { TripStatus, ExpenseType } from '~/types';
 import dayjs from 'dayjs';
+import ExpensePieChart from '~/components/charts/ExpensePieChart.vue';
+import ExpenseBarChart from '~/components/charts/ExpenseBarChart.vue';
 
 // Define components to be used
 const DashboardCard = defineComponent({
@@ -308,41 +310,7 @@ const DashboardCard = defineComponent({
   `
 });
 
-const ExpensePieChart = defineComponent({
-  props: {
-    data: Array
-  },
-  mounted() {
-    // This would be a Chart.js implementation in a real app
-    console.log('Mounted pie chart with data:', this.data);
-  },
-  template: `
-    <div class="flex justify-center items-center h-full">
-      <div class="text-center">
-        <p class="text-gray-500 dark:text-gray-400">Chart would render here</p>
-        <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Using Chart.js in a real implementation</p>
-      </div>
-    </div>
-  `
-});
-
-const ExpenseBarChart = defineComponent({
-  props: {
-    data: Array
-  },
-  mounted() {
-    // This would be a Chart.js implementation in a real app
-    console.log('Mounted bar chart with data:', this.data);
-  },
-  template: `
-    <div class="flex justify-center items-center h-full">
-      <div class="text-center">
-        <p class="text-gray-500 dark:text-gray-400">Chart would render here</p>
-        <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Using Chart.js in a real implementation</p>
-      </div>
-    </div>
-  `
-});
+// Chart components are imported from separate files
 
 // State
 const loading = ref(true);
