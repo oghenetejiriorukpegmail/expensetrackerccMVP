@@ -225,6 +225,7 @@ import { useSupabaseUser } from '#imports';
 import { useTripStore } from '~/stores/tripStore';
 import { useExpenseStore } from '~/stores/expenseStore';
 import { useMileageStore } from '~/stores/mileageStore';
+import { useUserStore } from '~/stores/userStore';
 import { TripStatus, ExpenseType } from '~/types';
 import dayjs from 'dayjs';
 import ExpensePieChart from '~/components/charts/ExpensePieChart.vue';
@@ -315,6 +316,7 @@ const DashboardCard = defineComponent({
 // State
 const loading = ref(true);
 const supabaseUser = useSupabaseUser();
+const userStore = useUserStore();
 const tripStore = useTripStore();
 const expenseStore = useExpenseStore();
 const mileageStore = useMileageStore();
@@ -437,14 +439,24 @@ const formatDateRange = (startDate, endDate) => {
 // Load data
 onMounted(async () => {
   if (supabaseUser.value) {
-    // Load all data in parallel
-    await Promise.all([
-      tripStore.fetchTrips(),
-      expenseStore.fetchExpenses(),
-      mileageStore.fetchMileageRecords()
-    ]);
-    
-    loading.value = false;
+    try {
+      // Make sure user profile and settings are loaded first
+      if (!userStore.profile) {
+        console.log('Loading user profile on dashboard page');
+        await userStore.fetchProfile();
+      }
+      
+      // Then load all data in parallel
+      await Promise.all([
+        tripStore.fetchTrips(),
+        expenseStore.fetchExpenses(),
+        mileageStore.fetchMileageRecords()
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      loading.value = false;
+    }
   }
 });
 </script>

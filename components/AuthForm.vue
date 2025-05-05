@@ -245,57 +245,34 @@ const resetForm = ref({
   email: ''
 });
 
-// Handle user login
+// Handle user login - simplified version
 const handleLogin = async () => {
   error.value = '';
   loading.value = true;
   
   try {
-    // Sign in with email and password with persistent session
-    const { data: { session, user }, error: loginError } = await supabase.auth.signInWithPassword({
+    // Basic login with no extra options
+    const { data, error: loginError } = await supabase.auth.signInWithPassword({
       email: loginForm.value.email,
-      password: loginForm.value.password,
-      options: {
-        // Explicitly set the session to be persistent
-        storeSession: true
-      }
+      password: loginForm.value.password
     });
     
     if (loginError) {
       throw loginError;
     }
     
-    if (!session || !user) {
+    if (!data || !data.session || !data.user) {
       throw new Error('Authentication failed. No session created.');
     }
     
-    console.log('Login successful, user:', user.id);
+    console.log('Login successful! Redirecting to dashboard...');
     
-    // Save the session token (already done by Supabase, but let's ensure it)
-    localStorage.setItem('supabase-auth', JSON.stringify({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      expires_at: session.expires_at,
-      user: user
-    }));
+    // Navigate directly - don't wait for profile fetching
+    window.location.href = '/dashboard';
     
-    // Wait a moment for the auth state to fully propagate
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    try {
-      // Fetch or create profile with the same Supabase client to ensure auth state is consistent
-      await userStore.fetchProfile(supabase);
-      console.log('Profile loaded successfully');
-      // Use simple direct navigation - most reliable approach
-      window.location.href = '/dashboard';
-    } catch (profileError: any) {
-      console.error('Error loading profile:', profileError);
-      error.value = 'Login successful but failed to load profile. Please try again.';
-    }
   } catch (err: any) {
     console.error('Login error:', err);
     error.value = err.message || 'Failed to sign in. Please check your credentials.';
-  } finally {
     loading.value = false;
   }
 };
