@@ -333,7 +333,7 @@ const handleGoogleLogin = async () => {
   try {
     // Use the production URL for the redirect
     // In development, this will be updated automatically by Supabase
-    const redirectUrl = 'https://expensetracermvp.netlify.app/dashboard';
+    const redirectUrl = 'https://expensetrackermvp.netlify.app/dashboard';
     
     console.log('Starting Google OAuth flow with redirect to:', redirectUrl);
     
@@ -360,7 +360,7 @@ const handleGoogleLogin = async () => {
     
     // Check for specific error types for better error messages
     if (err.message && err.message.includes('redirect_uri_mismatch')) {
-      error.value = 'Authentication configuration error: Redirect URI mismatch. Please contact the administrator.';
+      error.value = 'Authentication configuration error: Redirect URI mismatch. The URI https://expensetrackermvp.netlify.app/dashboard must be added to allowed redirects.';
     } else if (err.message && err.message.includes('invalid_client')) {
       error.value = 'Authentication configuration error: Invalid client. Please contact the administrator.';
     } else {
