@@ -166,9 +166,46 @@ exports.handler = async (event, context) => {
     // If a template URL is provided, try to use it as a base
     if (templateUrl) {
       try {
-        const response = await fetch(templateUrl);
-        const templateBuffer = await response.arrayBuffer();
-        await workbook.xlsx.load(templateBuffer);
+        console.log('Loading Excel template from URL:', templateUrl);
+        
+        // Fetch the template from Supabase if it's a storage URL
+        if (templateUrl.includes('supabase') || templateUrl.includes('storage')) {
+          // Extract the file path from the URL
+          const storageUrl = new URL(templateUrl);
+          const pathParts = storageUrl.pathname.split('/');
+          const bucket = pathParts[pathParts.indexOf('object') + 1] || 'templates';
+          const filePath = pathParts.slice(pathParts.indexOf(bucket) + 1).join('/');
+          
+          console.log('Downloading template from Supabase storage:', bucket, filePath);
+          
+          // Download the template file from Supabase storage
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .download(filePath);
+          
+          if (error) {
+            throw new Error(`Failed to download template: ${error.message}`);
+          }
+          
+          if (!data) {
+            throw new Error('Template file not found');
+          }
+          
+          // Load the template
+          const templateBuffer = await data.arrayBuffer();
+          await workbook.xlsx.load(templateBuffer);
+          console.log('Successfully loaded template from Supabase storage');
+        } else {
+          // Regular fetch for other URLs
+          const response = await fetch(templateUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch template: ${response.statusText}`);
+          }
+          
+          const templateBuffer = await response.arrayBuffer();
+          await workbook.xlsx.load(templateBuffer);
+          console.log('Successfully loaded template from URL');
+        }
       } catch (error) {
         console.error('Failed to load template:', error);
         // Continue with a new workbook if template loading fails

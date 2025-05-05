@@ -525,11 +525,16 @@ async function generateReport() {
 // Generate Excel report
 async function generateExcelReport() {
   try {
+    // Make sure we have the template URL if user wants to use it
+    if (form.value.useTemplate && !userSettings.value?.excel_template_url) {
+      throw new Error('No Excel template found. Please upload a template in Settings.');
+    }
+    
     const params = {
       tripId: form.value.tripId || null,
       startDate: form.value.startDate || null,
       endDate: form.value.endDate || null,
-      templateUrl: form.value.useTemplate ? userSettings.value?.excel_template_url : null
+      templateUrl: form.value.useTemplate ? userSettings.value.excel_template_url : null
     };
     
     // Call the Netlify function
