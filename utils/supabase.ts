@@ -5,6 +5,9 @@ import { useRuntimeConfig } from '#app';
  * Create a Supabase client with the credentials from the environment
  * Use this client for custom operations not handled by the Nuxt Supabase module
  */
+// Import our safe storage helper
+import { safeStorage } from '~/utils/hydration-helpers';
+
 /**
  * Get the existing Supabase client from Nuxt if possible,
  * or create a new one with matching configuration if necessary
@@ -20,29 +23,10 @@ export const createSupabaseClient = () => {
     console.warn('Could not get existing Supabase client, creating a new one');
   }
   
-  // Create new client only as fallback with local storage configuration
+  // Create new client only as fallback
   const config = useRuntimeConfig();
   
-  // Define browser storage wrapper to force persistence
-  const customStorage = {
-    getItem: (key) => {
-      if (typeof window === 'undefined') return null;
-      const value = localStorage.getItem(key);
-      return value;
-    },
-    setItem: (key, value) => {
-      if (typeof window === 'undefined') return;
-      localStorage.setItem(key, value);
-      // Save to sessionStorage as well for redundancy
-      sessionStorage.setItem(key, value);
-    },
-    removeItem: (key) => {
-      if (typeof window === 'undefined') return;
-      localStorage.removeItem(key);
-      sessionStorage.removeItem(key);
-    }
-  };
-  
+  // Use our safe storage implementation
   return createClient(
     config.public.supabaseUrl,
     config.public.supabaseKey,
@@ -51,11 +35,17 @@ export const createSupabaseClient = () => {
         persistSession: true,
         autoRefreshToken: true,
         storageKey: 'supabase-auth',
-        storage: typeof window !== 'undefined' ? customStorage : undefined,
+        storage: typeof window !== 'undefined' ? safeStorage : undefined,
+        detectSessionInUrl: false, // Avoid URL parsing for better CSP compliance
       },
       realtime: {
         params: {
           eventsPerSecond: 10,
+        },
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'supabase-js-browser', // Add a client identifier
         },
       },
     }

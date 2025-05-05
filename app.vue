@@ -11,8 +11,26 @@
 // Import animations
 import '~/assets/css/animations.css';
 
-// Import animations only
-import { useRouter, onMounted } from '#imports';
+// Import hydration helpers
+import { runAfterHydration } from '~/utils/hydration-helpers';
+import { defineNuxtPlugin } from '#imports';
+
+// Handle lockdown CSP and hydration
+if (process.client) {
+  // Wait until after hydration to run any browser-specific code
+  runAfterHydration(() => {
+    console.log('Running post-hydration initialization');
+
+    // Define a meta tag to attempt to handle CSP issues
+    if (typeof document !== 'undefined') {
+      // Add a meta tag to handle lockdown CSP issues
+      const metaTag = document.createElement('meta');
+      metaTag.httpEquiv = 'Content-Security-Policy';
+      metaTag.content = "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; connect-src 'self' *;";
+      document.head.appendChild(metaTag);
+    }
+  });
+}
 
 // Auth middleware is applied through the Nuxt configuration
 </script>

@@ -1,4 +1,6 @@
 // Global auth plugin
+import { safeStorage } from '~/utils/hydration-helpers';
+
 export default defineNuxtPlugin((nuxtApp) => {
   // Add global middleware
   addRouteMiddleware('global-auth', async (to) => {
@@ -16,33 +18,36 @@ export default defineNuxtPlugin((nuxtApp) => {
     const supabase = useSupabaseClient();
     
     try {
-      // First, try to load session from localStorage directly if it exists
+      // First, try to load session from storage using our safer wrapper
       // This is a safety mechanism in case the Supabase client's session state is lost
-      if (typeof localStorage !== 'undefined') {
-        const storedSession = localStorage.getItem('supabase-auth');
-        if (storedSession) {
-          try {
-            const parsedSession = JSON.parse(storedSession);
-            if (parsedSession?.access_token && parsedSession?.refresh_token) {
-              console.log('Found session in localStorage, restoring...');
-              // Try to set the session with stored tokens
-              const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
-                access_token: parsedSession.access_token,
-                refresh_token: parsedSession.refresh_token
-              });
-              
-              if (setSessionError) {
-                console.error('Error restoring session:', setSessionError);
-                // Continue to regular session check
-              } else if (setSessionData.session) {
-                console.log('Session restored from localStorage');
-                // Successfully restored, continue with route
-                return;
-              }
+      const storedSession = safeStorage.getItem('supabase-auth');
+      if (storedSession) {
+        try {
+          const parsedSession = JSON.parse(storedSession);
+          if (parsedSession?.access_token && parsedSession?.refresh_token) {
+            // Only show this message once per session, not on every navigation
+            const hasShownRestoreMessage = sessionStorage.getItem('session-restore-shown');
+            if (!hasShownRestoreMessage) {
+              console.log('Found session in storage, restoring...');
+              sessionStorage.setItem('session-restore-shown', 'true');
             }
-          } catch (parseError) {
-            console.error('Error parsing stored session:', parseError);
+            
+            // Try to set the session with stored tokens
+            const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
+              access_token: parsedSession.access_token,
+              refresh_token: parsedSession.refresh_token
+            });
+            
+            if (setSessionError) {
+              console.error('Error restoring session:', setSessionError);
+              // Continue to regular session check
+            } else if (setSessionData.session) {
+              // Successfully restored, continue with route
+              return;
+            }
           }
+        } catch (parseError) {
+          console.error('Error parsing stored session:', parseError);
         }
       }
       
@@ -54,14 +59,13 @@ export default defineNuxtPlugin((nuxtApp) => {
         return navigateTo('/auth/login');
       }
       
-      // Ensure session is saved to localStorage for redundancy
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('supabase-auth', JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-          expires_at: session.expires_at
-        }));
-      }
+      // Ensure session is saved to storage for redundancy
+      safeStorage.setItem('supabase-auth', JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_at: session.expires_at,
+        user: session.user
+      }));
       
       // Check if token is about to expire (within 10 minutes)
       const expiresAt = session.expires_at;
@@ -78,12 +82,13 @@ export default defineNuxtPlugin((nuxtApp) => {
         }
         console.log('Session refreshed successfully');
         
-        // Update localStorage with refreshed session
-        if (data.session && typeof localStorage !== 'undefined') {
-          localStorage.setItem('supabase-auth', JSON.stringify({
+        // Update storage with refreshed session
+        if (data.session) {
+          safeStorage.setItem('supabase-auth', JSON.stringify({
             access_token: data.session.access_token,
             refresh_token: data.session.refresh_token,
-            expires_at: data.session.expires_at
+            expires_at: data.session.expires_at,
+            user: data.session.user
           }));
         }
       }
