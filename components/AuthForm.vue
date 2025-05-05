@@ -287,7 +287,8 @@ const handleLogin = async () => {
       // Fetch or create profile with the same Supabase client to ensure auth state is consistent
       await userStore.fetchProfile(supabase);
       console.log('Profile loaded successfully');
-      navigateTo('/dashboard');
+      // Use our intermediate redirection page for maximum reliability
+      window.location.href = '/to-dashboard.html';
     } catch (profileError: any) {
       console.error('Error loading profile:', profileError);
       error.value = 'Login successful but failed to load profile. Please try again.';

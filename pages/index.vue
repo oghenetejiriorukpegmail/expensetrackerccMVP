@@ -411,8 +411,19 @@ const formatDate = (dateString: string) => {
 
 // Navigation handler for dashboard
 const navigateToDashboard = () => {
-  // Use our safe navigation helper
-  safeNavigate('/dashboard');
+  // Try all possible navigation methods for maximum reliability
+  try {
+    if (window.__expenseTrackerNavigation) {
+      // Use our global navigation helper
+      window.__expenseTrackerNavigation.toDashboard();
+      return;
+    }
+  } catch (e) {
+    console.error('Error using global navigation helper:', e);
+  }
+  
+  // Fallback to our intermediate redirection page
+  window.location.href = '/to-dashboard.html';
 };
 
 // Format currency

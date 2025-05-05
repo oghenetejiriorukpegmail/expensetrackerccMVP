@@ -29,13 +29,51 @@ if (process.client) {
       metaTag.content = "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: *; connect-src 'self' *;";
       document.head.appendChild(metaTag);
       
-      // Fix direct links to dashboard
-      const dashboardLinks = document.querySelectorAll('a[href="/dashboard"]');
-      dashboardLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-          e.preventDefault();
-          window.location.href = '/dashboard';
+      // Fix all links to improve navigation reliability
+      const fixNavigation = () => {
+        // Fix dashboard links
+        const dashboardLinks = document.querySelectorAll('a[href="/dashboard"]');
+        dashboardLinks.forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = '/dashboard';
+          });
         });
+        
+        // Fix NuxtLink components that might be causing issues
+        document.querySelectorAll('a[href^="/"]').forEach(link => {
+          // Don't modify links that already have event listeners
+          if (!(link as any).__navFixed) {
+            // Mark as fixed to avoid duplicating
+            (link as any).__navFixed = true;
+            
+            // Original href
+            const href = link.getAttribute('href');
+            if (!href) return;
+            
+            link.addEventListener('click', (e) => {
+              // Special handling for certain paths
+              if (href === '/dashboard' || href.startsWith('/trips') || 
+                  href.startsWith('/expenses') || href.startsWith('/reports')) {
+                e.preventDefault();
+                window.location.href = href;
+              }
+            });
+          }
+        });
+      };
+      
+      // Run immediately and also set up a mutation observer for dynamically added links
+      fixNavigation();
+      
+      // Add an observer to catch new links
+      const observer = new MutationObserver(() => {
+        fixNavigation();
+      });
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
       });
     }
   });
