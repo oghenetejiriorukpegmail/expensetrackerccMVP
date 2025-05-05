@@ -39,6 +39,19 @@ export default defineNuxtConfig({
       login: '/auth/login',
       callback: '/auth/confirm',
       exclude: ['/auth/register', '/']
+    },
+    cookieName: 'supabase-auth-token',
+    cookieOptions: {
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
+    },
+    clientOptions: {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        storageKey: 'supabase-auth',
+      }
     }
   },
   app: {

@@ -14,6 +14,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
+        console.log('Session found on app load, initializing user profile');
         // Initialize user profile and settings
         await userStore.fetchProfile(supabase);
       }
@@ -22,19 +23,47 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     }
   };
   
+  // Function to handle session recovery
+  const recoverSession = async () => {
+    try {
+      const supabase = useSupabaseClient();
+      
+      // Try to recover session from storage
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error('Error recovering session:', error);
+        return false;
+      }
+      
+      return data.session !== null;
+    } catch (error) {
+      console.error('Exception during session recovery:', error);
+      return false;
+    }
+  };
+  
   // For client-side only
   if (process.client) {
-    // Initialize on app start
+    // First try to recover any existing session
+    await recoverSession();
+    
+    // Then initialize user store
     await initializeUserStore();
     
-    // Also initialize when auth state changes
+    // Also listen for auth state changes
     const supabase = useSupabaseClient();
-    supabase.auth.onAuthStateChange(async (event) => {
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      
       if (event === 'SIGNED_IN') {
         await initializeUserStore();
       } else if (event === 'SIGNED_OUT') {
         const userStore = useUserStore();
         userStore.resetState();
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Re-initialize the user store when token is refreshed
+        await initializeUserStore();
       }
     });
   }

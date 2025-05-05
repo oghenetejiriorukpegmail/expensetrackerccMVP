@@ -15,6 +15,8 @@ export const createSupabaseClient = () => {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        storageKey: 'supabase-auth',
+        storage: localStorage,
       },
       realtime: {
         params: {

@@ -25,7 +25,35 @@ const initAuth = async () => {
     
     if (session) {
       console.log('Session found on app load, initializing user profile');
+      // Save session to localStorage for better persistence
+      localStorage.setItem('supabase-auth-token', JSON.stringify(session));
       await userStore.fetchProfile();
+    } else {
+      // Try to recover session from localStorage if available
+      const savedSession = localStorage.getItem('supabase-auth-token');
+      if (savedSession) {
+        try {
+          console.log('Found saved session in localStorage, attempting to restore');
+          const parsedSession = JSON.parse(savedSession);
+          
+          // Set session data
+          const { data, error } = await supabase.auth.setSession({
+            access_token: parsedSession.access_token,
+            refresh_token: parsedSession.refresh_token
+          });
+          
+          if (error) {
+            console.error('Failed to restore session:', error);
+            localStorage.removeItem('supabase-auth-token');
+          } else if (data.session) {
+            console.log('Session restored successfully');
+            await userStore.fetchProfile();
+          }
+        } catch (e) {
+          console.error('Error parsing saved session:', e);
+          localStorage.removeItem('supabase-auth-token');
+        }
+      }
     }
   } catch (error) {
     console.error('Error initializing auth state:', error);

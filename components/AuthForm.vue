@@ -38,6 +38,7 @@
           v-model="loginForm.email"
           type="email"
           required
+          autocomplete="email"
           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
           placeholder="your@email.com"
         />
@@ -52,6 +53,7 @@
           v-model="loginForm.password"
           type="password"
           required
+          autocomplete="current-password"
           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-white"
           placeholder="••••••••"
         />
@@ -249,10 +251,14 @@ const handleLogin = async () => {
   loading.value = true;
   
   try {
-    // Sign in with email and password
+    // Sign in with email and password with persistent session
     const { data: { session, user }, error: loginError } = await supabase.auth.signInWithPassword({
       email: loginForm.value.email,
-      password: loginForm.value.password
+      password: loginForm.value.password,
+      options: {
+        // Explicitly set the session to be persistent
+        storeSession: true
+      }
     });
     
     if (loginError) {
@@ -265,8 +271,11 @@ const handleLogin = async () => {
     
     console.log('Login successful, user:', user.id);
     
+    // Ensure session is stored properly
+    localStorage.setItem('supabase-auth-token', JSON.stringify(session));
+    
     // Wait a moment for the auth state to fully propagate
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     try {
       // Fetch or create profile with the same Supabase client to ensure auth state is consistent
