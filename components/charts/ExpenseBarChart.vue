@@ -5,11 +5,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watchEffect, computed } from 'vue';
-import { Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import { ref, onMounted, watchEffect, computed, nextTick } from 'vue';
+import { Chart, CategoryScale, LinearScale, BarElement, BarController, Title, Tooltip, Legend } from 'chart.js';
 
 // Register required Chart.js components
-Chart.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+Chart.register(CategoryScale, LinearScale, BarElement, BarController, Title, Tooltip, Legend);
 
 // Props
 const props = defineProps({

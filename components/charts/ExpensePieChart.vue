@@ -5,12 +5,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watchEffect, computed } from 'vue';
-import { Chart, ArcElement, Tooltip, Legend } from 'chart.js';
+import { ref, onMounted, watchEffect, computed, nextTick } from 'vue';
+import { Chart, ArcElement, Tooltip, Legend, PieController } from 'chart.js';
 import { capitalize } from '~/utils/string-helpers';
 
 // Register required Chart.js components
-Chart.register(ArcElement, Tooltip, Legend);
+Chart.register(ArcElement, Tooltip, Legend, PieController);
 
 // Props
 const props = defineProps({
