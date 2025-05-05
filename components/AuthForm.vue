@@ -267,8 +267,8 @@ const handleLogin = async () => {
     
     console.log('Login successful! Redirecting to dashboard...');
     
-    // Navigate directly - don't wait for profile fetching
-    window.location.href = '/dashboard';
+    // Use proper Nuxt navigation - more reliable than window.location
+    navigateTo('/dashboard');
     
   } catch (err: any) {
     console.error('Login error:', err);
