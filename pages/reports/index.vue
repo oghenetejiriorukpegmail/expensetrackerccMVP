@@ -232,46 +232,58 @@
       </div>
     </div>
     
-    <!-- Previous Reports -->
+    <!-- Recent Reports -->
     <div class="mt-8">
       <h2 class="text-lg font-semibold mb-4">Recent Reports</h2>
       
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div class="divide-y divide-gray-200 dark:divide-gray-700">
-          <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-750">
+        <div v-if="recentReports.length === 0" class="p-8 text-center text-gray-500 dark:text-gray-400">
+          <p>No reports have been generated yet.</p>
+          <p class="mt-2 text-sm">Generate a report using the form above to see it here.</p>
+        </div>
+        
+        <div v-else class="divide-y divide-gray-200 dark:divide-gray-700">
+          <div 
+            v-for="(report, index) in recentReports" 
+            :key="index"
+            class="p-4 hover:bg-gray-50 dark:hover:bg-gray-750"
+          >
             <div class="flex justify-between items-start">
               <div>
                 <h3 class="font-medium text-gray-900 dark:text-white">
-                  Business Trip to New York
+                  {{ report.title }}
                 </h3>
                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Generated on May 1, 2025
+                  Generated on {{ formatDate(report.date) }}
                 </p>
+                <div class="mt-1 flex space-x-2">
+                  <span 
+                    v-if="report.format" 
+                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                    :class="{
+                      'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200': report.format === 'excel',
+                      'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200': report.format === 'csv',
+                      'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200': report.format === 'pdf',
+                    }"
+                  >
+                    {{ report.format.toUpperCase() }}
+                  </span>
+                  <span 
+                    v-if="report.includesReceipts" 
+                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                  >
+                    + Receipts
+                  </span>
+                </div>
               </div>
               <div class="flex space-x-2">
-                <button class="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400">
+                <button 
+                  @click="regenerateReport(report)"
+                  class="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
+                  title="Generate again"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-750">
-            <div class="flex justify-between items-start">
-              <div>
-                <h3 class="font-medium text-gray-900 dark:text-white">
-                  Q1 Expense Summary
-                </h3>
-                <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  Generated on Apr 15, 2025
-                </p>
-              </div>
-              <div class="flex space-x-2">
-                <button class="text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
                   </svg>
                 </button>
               </div>
@@ -306,6 +318,9 @@ const form = ref({
   includeReceipts: true,
   useTemplate: false
 });
+
+// Recent reports state (stored in localStorage)
+const recentReports = ref([]);
 
 // Initialize with last month if no trip ID
 if (!form.value.tripId) {
@@ -459,28 +474,226 @@ async function generateReport() {
   loading.value = true;
   
   try {
-    // In a real app, this would call an API endpoint to generate the report
-    // For this demo, we'll just simulate a download after a short delay
-    
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Simulate download
     const format = form.value.format;
-    const filename = `expense-report-${new Date().toISOString().split('T')[0]}.${format}`;
     
-    // In a real app, we would:
-    // 1. Call a server endpoint to generate the report
-    // 2. Stream the file back to the browser
-    // 3. Trigger a download
+    if (format === 'excel') {
+      await generateExcelReport();
+    } else if (format === 'csv') {
+      await generateCsvReport();
+    } else if (format === 'pdf') {
+      await generatePdfReport();
+    }
     
-    // For this demo, we'll just show a success message
-    alert(`Report would download as ${filename} in a complete implementation`);
+    if (form.value.includeReceipts && form.value.tripId) {
+      await generateReceiptsZip();
+    }
     
-    loading.value = false;
+    // Store the report in recent reports
+    const reportInfo = {
+      title: reportTitle(),
+      date: new Date(),
+      format: form.value.format,
+      includesReceipts: form.value.includeReceipts && form.value.tripId,
+      params: {
+        tripId: form.value.tripId,
+        startDate: form.value.startDate,
+        endDate: form.value.endDate,
+        format: form.value.format,
+        includeReceipts: form.value.includeReceipts,
+        useTemplate: form.value.useTemplate
+      }
+    };
+    
+    // Add to recent reports
+    recentReports.value.unshift(reportInfo);
+    
+    // Keep only the most recent 10 reports
+    if (recentReports.value.length > 10) {
+      recentReports.value = recentReports.value.slice(0, 10);
+    }
+    
+    // Save to localStorage
+    localStorage.setItem('recentReports', JSON.stringify(recentReports.value));
   } catch (error) {
     console.error('Error generating report:', error);
+    alert(`Error generating report: ${error.message || 'Unknown error'}`);
+  } finally {
     loading.value = false;
   }
+}
+
+// Generate Excel report
+async function generateExcelReport() {
+  try {
+    const params = {
+      tripId: form.value.tripId || null,
+      startDate: form.value.startDate || null,
+      endDate: form.value.endDate || null,
+      templateUrl: form.value.useTemplate ? userSettings.value?.excel_template_url : null
+    };
+    
+    // Call the Netlify function
+    const response = await fetch('/.netlify/functions/excel-generator', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(params)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate Excel report');
+    }
+    
+    // Get the filename from the Content-Disposition header
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'expense-report.xlsx';
+    
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
+    
+    // Get blob from response
+    const blob = await response.blob();
+    
+    // Create a download link and trigger the download
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Error generating Excel report:', error);
+    throw error;
+  }
+}
+
+// Generate CSV report (simplified version)
+async function generateCsvReport() {
+  try {
+    // For now, we'll generate a simple CSV from the reportData
+    let csvContent = "data:text/csv;charset=utf-8,";
+    
+    // Add headers for expenses
+    csvContent += "Date,Type,Vendor,Description,Amount,Currency,Location\n";
+    
+    // Add expense data
+    reportData.value.expenses.forEach(expense => {
+      csvContent += `${expense.date},${expense.expense_type},"${expense.vendor || ''}","${expense.description || ''}",${expense.amount},${expense.currency},"${expense.location || ''}"\n`;
+    });
+    
+    // Create a download link and trigger the download
+    const encodedUri = encodeURI(csvContent);
+    const tripName = reportData.value.tripName ? reportData.value.tripName.replace(/[^a-z0-9]/gi, '-').toLowerCase() : 'all-trips';
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `expense-report-${tripName}-${dateStr}.csv`;
+    
+    const a = document.createElement('a');
+    a.href = encodedUri;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Error generating CSV report:', error);
+    throw error;
+  }
+}
+
+// Generate PDF report (placeholder)
+async function generatePdfReport() {
+  alert('PDF export functionality will be implemented in a future update.');
+}
+
+// Generate ZIP file of receipts
+async function generateReceiptsZip() {
+  try {
+    // Only proceed if we have a trip ID and receipts
+    if (!form.value.tripId || reportData.value.receiptCount === 0) {
+      return;
+    }
+    
+    // Call the Netlify function
+    const response = await fetch('/.netlify/functions/receipt-zip', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        tripId: form.value.tripId
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to generate receipts ZIP');
+    }
+    
+    // Get the filename from the Content-Disposition header
+    const contentDisposition = response.headers.get('Content-Disposition');
+    let filename = 'receipts.zip';
+    
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+      if (filenameMatch) {
+        filename = filenameMatch[1];
+      }
+    }
+    
+    // Get blob from response
+    const blob = await response.blob();
+    
+    // Create a download link and trigger the download
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Error generating receipts ZIP:', error);
+    alert(`Error generating receipts ZIP: ${error.message}`);
+  }
+}
+
+// Generate a report title based on the current form
+function reportTitle() {
+  if (form.value.tripId) {
+    const trip = trips.value.find(t => t.id === form.value.tripId);
+    return trip ? `${trip.name} Report` : 'Trip Report';
+  } else if (form.value.startDate && form.value.endDate) {
+    return `Expense Report: ${formatDate(form.value.startDate)} - ${formatDate(form.value.endDate)}`;
+  } else if (form.value.startDate) {
+    return `Expense Report: From ${formatDate(form.value.startDate)}`;
+  } else if (form.value.endDate) {
+    return `Expense Report: Until ${formatDate(form.value.endDate)}`;
+  } else {
+    return 'All Expenses Report';
+  }
+}
+
+// Regenerate a previous report
+function regenerateReport(report) {
+  // Copy saved params to the form
+  Object.assign(form.value, report.params);
+  
+  // Generate the report
+  generateReport();
 }
 
 // Load initial data
@@ -496,6 +709,16 @@ onMounted(async () => {
     
     // Update the preview
     await updatePreview();
+    
+    // Load recent reports from localStorage
+    try {
+      const savedReports = localStorage.getItem('recentReports');
+      if (savedReports) {
+        recentReports.value = JSON.parse(savedReports);
+      }
+    } catch (error) {
+      console.error('Error loading recent reports:', error);
+    }
   }
 });
 </script>
