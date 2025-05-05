@@ -52,7 +52,7 @@
         
         <div class="flex space-x-3">
           <NuxtLink
-            :to="`/trips/${trip.id}/edit`"
+            :to="`/trips/edit/${trip.id}`"
             class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             Edit Trip
