@@ -184,31 +184,48 @@
           Receipt
         </label>
         
-        <div v-if="form.receipt_url" class="mb-3 flex items-center p-3 bg-gray-50 dark:bg-gray-750 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm pop-in">
-          <div class="w-12 h-12 rounded-full border border-gray-300 dark:border-gray-600 overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-gray-700">
-            <component :is="DocumentIcon" />
+        <div v-if="form.receipt_url" class="mb-3 p-3 bg-gray-50 dark:bg-gray-750 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm pop-in">
+          <div class="flex items-center mb-2">
+            <div class="w-12 h-12 rounded-full border border-gray-300 dark:border-gray-600 overflow-hidden flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+              <component :is="DocumentIcon" />
+            </div>
+            <div class="ml-3 flex-1">
+              <p class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                {{ receiptFileName }}
+              </p>
+              <div class="flex space-x-3 mt-1">
+                <a
+                  :href="form.receipt_url"
+                  target="_blank"
+                  class="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center"
+                >
+                  <component :is="EyeIcon" />
+                  View
+                </a>
+                <button 
+                  type="button" 
+                  @click="removeReceipt" 
+                  class="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center"
+                >
+                  <component :is="TrashIcon" />
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="ml-3 flex-1">
-            <p class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-              {{ receiptFileName }}
-            </p>
-            <div class="flex space-x-3 mt-1">
-              <a
-                :href="form.receipt_url"
-                target="_blank"
-                class="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center"
-              >
-                <component :is="EyeIcon" />
-                View
-              </a>
-              <button 
-                type="button" 
-                @click="removeReceipt" 
-                class="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center"
-              >
-                <component :is="TrashIcon" />
-                Remove
-              </button>
+          <!-- Receipt preview image -->
+          <div class="mt-2 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+            <img 
+              v-if="form.receipt_url && !form.receipt_url.endsWith('pdf')" 
+              :src="form.receipt_url" 
+              alt="Receipt preview" 
+              class="max-h-48 w-auto mx-auto object-contain"
+            />
+            <div 
+              v-else 
+              class="h-24 flex items-center justify-center bg-gray-100 dark:bg-gray-800"
+            >
+              <p class="text-sm text-gray-500 dark:text-gray-400">PDF Document</p>
             </div>
           </div>
         </div>
@@ -329,7 +346,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useTripStore } from '~/stores/tripStore';
 import { useExpenseStore } from '~/stores/expenseStore';
 import { useUserStore } from '~/stores/userStore';
@@ -441,16 +458,31 @@ onMounted(async () => {
   }
 });
 
+// Clean up any blob URLs when component is unmounted
+onUnmounted(() => {
+  if (form.value.receipt_url && form.value.receipt_url.startsWith('blob:')) {
+    URL.revokeObjectURL(form.value.receipt_url);
+  }
+});
+
 // Handle file input change
 function handleReceiptChange(event) {
   const file = event.target.files[0];
   if (file) {
     receiptFile.value = file;
+    
+    // Generate a preview URL for the selected file
+    const previewUrl = URL.createObjectURL(file);
+    form.value.receipt_url = previewUrl;
   }
 }
 
 // Remove receipt
 function removeReceipt() {
+  // Revoke the object URL to prevent memory leaks
+  if (form.value.receipt_url && form.value.receipt_url.startsWith('blob:')) {
+    URL.revokeObjectURL(form.value.receipt_url);
+  }
   form.value.receipt_url = '';
   receiptFile.value = null;
 }
