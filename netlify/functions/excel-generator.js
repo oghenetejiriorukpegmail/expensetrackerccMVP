@@ -156,6 +156,42 @@ exports.handler = async (event, context) => {
       filename = 'All-Expenses-Report';
     }
     
+    // Helper function to process variables in templates using regex pattern matching
+    const processVariables = (text, variables) => {
+      if (!text || typeof text !== 'string') return text;
+      
+      // Check if there are variables to process (using mustache-like syntax {{variable}})
+      if (!text.includes('{{')) return text;
+      
+      // Replace variables with their values
+      return text.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
+        const trimmedVar = variable.trim();
+        // Return the variable value or keep the original syntax if variable not found
+        return variables[trimmedVar] !== undefined ? variables[trimmedVar] : match;
+      });
+    };
+    
+    // Process an entire worksheet, looking for variables to substitute
+    const processWorksheet = (worksheet, variables) => {
+      console.log(`Processing variables in worksheet: ${worksheet.name}`);
+      
+      // Iterate through all cells in the worksheet
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+          if (cell.type === ExcelJS.ValueType.String && cell.text) {
+            const originalValue = cell.text;
+            const processedValue = processVariables(originalValue, variables);
+            
+            // Only update if something changed
+            if (originalValue !== processedValue) {
+              console.log(`Replacing variable in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
+              cell.value = processedValue;
+            }
+          }
+        });
+      });
+    };
+    
     // Create a new Excel workbook
     let workbook = new ExcelJS.Workbook();
     workbook.creator = 'Expense Tracker';
@@ -259,9 +295,315 @@ exports.handler = async (event, context) => {
     let expensesSheet = null;
     let mileageSheet = null;
 
+    // Build variable data for template processing
+    const buildTemplateVariables = async () => {
+      console.log('Building template variables for substitution');
+      
+      // Get today's date in various formats
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const dateFormatted = now.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      
+      // Format functions for currency and numbers
+      const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD'
+        }).format(amount);
+      };
+      
+      const formatNumber = (num) => {
+        return new Intl.NumberFormat('en-US', {
+          maximumFractionDigits: 2
+        }).format(num);
+      };
+      
+      // Calculate totals
+      const totalExpenses = expenses.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
+      const totalMileage = mileageRecords.reduce((sum, record) => sum + parseFloat(record.distance), 0);
+      const mileageRate = 0.58; // Default rate, could be fetched from user settings
+      const mileageCost = totalMileage * mileageRate;
+      const grandTotal = totalExpenses + mileageCost;
+      
+      // Count expense types
+      const expenseTypeCount = {};
+      expenses.forEach(expense => {
+        const type = expense.expense_type || 'other';
+        expenseTypeCount[type] = (expenseTypeCount[type] || 0) + 1;
+      });
+      
+      // Calculate expense type totals
+      const expenseTypeAmount = {};
+      expenses.forEach(expense => {
+        const type = expense.expense_type || 'other';
+        expenseTypeAmount[type] = (expenseTypeAmount[type] || 0) + parseFloat(expense.amount);
+      });
+      
+      // Create expense descriptions
+      const expenseDescriptions = expenses.map(expense => {
+        return {
+          id: expense.id,
+          description: expense.description || `Expense at ${expense.vendor || 'unknown vendor'}`,
+          vendor: expense.vendor || '',
+          amount: formatCurrency(expense.amount),
+          type: expense.expense_type || 'other',
+          date: expense.date || ''
+        };
+      });
+      
+      // Build base variables object
+      const variables = {
+        // Date information
+        'date': dateStr,
+        'date.formatted': dateFormatted,
+        'date.year': now.getFullYear().toString(),
+        'date.month': (now.getMonth() + 1).toString(),
+        'date.day': now.getDate().toString(),
+        
+        // Report information
+        'report.title': reportTitle,
+        'report.filename': filename,
+        
+        // Trip information (if applicable)
+        'trip.name': tripData?.name || 'All Expenses',
+        'trip.description': tripData?.description || '',
+        'trip.location': tripData?.location || '',
+        'trip.status': tripData?.status || '',
+        'trip.start_date': tripData?.start_date || '',
+        'trip.end_date': tripData?.end_date || '',
+        
+        // Counts and totals
+        'expenses.count': expenses.length.toString(),
+        'expenses.total': formatNumber(totalExpenses),
+        'expenses.total.currency': formatCurrency(totalExpenses),
+        
+        'mileage.count': mileageRecords.length.toString(),
+        'mileage.total.distance': formatNumber(totalMileage),
+        'mileage.total.cost': formatCurrency(mileageCost),
+        'mileage.rate': mileageRate.toString(),
+        
+        'grand_total': formatNumber(grandTotal),
+        'grand_total.currency': formatCurrency(grandTotal),
+        
+        // For each expense type
+        'expenses.accommodation.count': (expenseTypeCount['accommodation'] || 0).toString(),
+        'expenses.transportation.count': (expenseTypeCount['transportation'] || 0).toString(),
+        'expenses.meals.count': (expenseTypeCount['meals'] || 0).toString(),
+        'expenses.entertainment.count': (expenseTypeCount['entertainment'] || 0).toString(),
+        'expenses.business.count': (expenseTypeCount['business'] || 0).toString(),
+        'expenses.office.count': (expenseTypeCount['office'] || 0).toString(),
+        'expenses.other.count': (expenseTypeCount['other'] || 0).toString(),
+        
+        'expenses.accommodation.total': formatCurrency(expenseTypeAmount['accommodation'] || 0),
+        'expenses.transportation.total': formatCurrency(expenseTypeAmount['transportation'] || 0),
+        'expenses.meals.total': formatCurrency(expenseTypeAmount['meals'] || 0),
+        'expenses.entertainment.total': formatCurrency(expenseTypeAmount['entertainment'] || 0),
+        'expenses.business.total': formatCurrency(expenseTypeAmount['business'] || 0),
+        'expenses.office.total': formatCurrency(expenseTypeAmount['office'] || 0),
+        'expenses.other.total': formatCurrency(expenseTypeAmount['other'] || 0),
+        
+        // Description variables
+        'expenses.descriptions': expenseDescriptions.map(ed => ed.description).join('; '),
+      };
+      
+      // Add individual expense descriptions with index
+      expenseDescriptions.forEach((ed, index) => {
+        variables[`expense.${index+1}.description`] = ed.description;
+        variables[`expense.${index+1}.vendor`] = ed.vendor;
+        variables[`expense.${index+1}.amount`] = ed.amount;
+        variables[`expense.${index+1}.type`] = ed.type;
+        variables[`expense.${index+1}.date`] = ed.date;
+      });
+      
+      // Add any dynamic content via LLM integration for variables with llm. prefix
+      // This will be processed via OpenRouter API with Qwen 3 model
+      try {
+        // OpenRouter API integration
+        const generateLLMContent = async (prompt) => {
+          console.log('Generating content with OpenRouter API using Qwen 3 model');
+          console.log('Prompt:', prompt);
+          
+          // Use provided OpenRouter API key
+          const openRouterApiKey = "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";
+          
+          try {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${openRouterApiKey}`,
+                "HTTP-Referer": "https://expense-tracker.app", 
+                "X-Title": "Expense Tracker",
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                "model": "qwen/qwen3-235b-a22b:free",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "You are a professional financial assistant helping generate concise, clear summaries for expense reports. Keep your responses brief, factual, and professional."
+                  },
+                  {
+                    "role": "user",
+                    "content": prompt
+                  }
+                ]
+              })
+            });
+          
+            if (!response.ok) {
+              throw new Error(`OpenRouter API returned status ${response.status}`);
+            }
+          
+            const data = await response.json();
+            console.log('OpenRouter API response:', JSON.stringify(data, null, 2));
+            
+            if (data.choices && data.choices.length > 0 && data.choices[0].message) {
+              return data.choices[0].message.content.trim();
+            }
+            
+            throw new Error('Unexpected response format from OpenRouter API');
+          } catch (error) {
+            console.error('Error calling OpenRouter API:', error);
+            throw error;
+          }
+        };
+        
+        // Generate expense summary using LLM
+        let expenseSummaryPrompt = '';
+        let categorySummaryPrompt = '';
+        
+        if (tripData) {
+          // Trip-specific prompt
+          expenseSummaryPrompt = `Generate a concise 1-2 sentence summary of expenses for a business trip with the following details:
+- Trip name: ${tripData.name}
+- Trip location: ${tripData.location || 'N/A'}
+- Trip dates: ${tripData.start_date || 'N/A'} to ${tripData.end_date || 'N/A'}
+- Total expenses: ${formatCurrency(totalExpenses)}
+- Number of expenses: ${expenses.length}
+- Common descriptions: ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}
+
+Format it as a professional expense report summary.`;
+
+          // Category prompt for trip
+          categorySummaryPrompt = `Analyze the breakdown of expenses for a business trip with these category totals:
+- Accommodation: ${formatCurrency(expenseTypeAmount['accommodation'] || 0)}
+- Transportation: ${formatCurrency(expenseTypeAmount['transportation'] || 0)}
+- Meals: ${formatCurrency(expenseTypeAmount['meals'] || 0)}
+- Entertainment: ${formatCurrency(expenseTypeAmount['entertainment'] || 0)}
+- Other: ${formatCurrency(expenseTypeAmount['other'] || 0)}
+- Common descriptions: ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}
+
+Provide a brief 1-2 sentence analysis highlighting the main expense categories and any notable spending patterns.`;
+        } else {
+          // Date range prompt
+          const dateRangeText = startDate && endDate 
+            ? `from ${startDate} to ${endDate}` 
+            : startDate 
+              ? `from ${startDate}` 
+              : endDate 
+                ? `until ${endDate}` 
+                : "for all recorded periods";
+          
+          expenseSummaryPrompt = `Generate a concise 1-2 sentence summary of expenses for a report with the following details:
+- Date range: ${dateRangeText}
+- Total expenses: ${formatCurrency(totalExpenses)}
+- Number of expenses: ${expenses.length}
+- Common descriptions: ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}
+
+Format it as a professional expense report summary.`;
+
+          // Category prompt for date range
+          categorySummaryPrompt = `Analyze the breakdown of expenses ${dateRangeText} with these category totals:
+- Accommodation: ${formatCurrency(expenseTypeAmount['accommodation'] || 0)}
+- Transportation: ${formatCurrency(expenseTypeAmount['transportation'] || 0)}
+- Meals: ${formatCurrency(expenseTypeAmount['meals'] || 0)}
+- Entertainment: ${formatCurrency(expenseTypeAmount['entertainment'] || 0)}
+- Other: ${formatCurrency(expenseTypeAmount['other'] || 0)}
+- Common descriptions: ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}
+
+Provide a brief 1-2 sentence analysis highlighting the main expense categories and any notable spending patterns.`;
+        }
+        
+        // Get LLM responses
+        const [expenseSummary, categorySummary] = await Promise.all([
+          generateLLMContent(expenseSummaryPrompt),
+          generateLLMContent(categorySummaryPrompt)
+        ]);
+        
+        // Store the LLM-generated content in variables
+        variables['llm.report.summary'] = expenseSummary;
+        variables['llm.categories.analysis'] = categorySummary;
+        
+        // Add additional trip-specific content if relevant
+        if (tripData) {
+          variables['llm.trip.summary'] = expenseSummary;
+        } else {
+          variables['llm.expenses.summary'] = expenseSummary;
+        }
+        
+        // Add description summary
+        if (expenseDescriptions.length > 0) {
+          // Generate a description summary for all expenses
+          const descriptionSummaryPrompt = `Based on these expense descriptions:
+${expenseDescriptions.map((ed, i) => `${i+1}. ${ed.description} (${ed.amount})`).join('\n')}
+
+Create a concise 1-2 sentence summary of what these expenses represent collectively. Focus on patterns and purpose.`;
+          
+          try {
+            const descriptionSummary = await generateLLMContent(descriptionSummaryPrompt);
+            variables['llm.description.summary'] = descriptionSummary;
+          } catch (error) {
+            console.error('Error generating description summary:', error);
+            variables['llm.description.summary'] = `Summary of ${expenses.length} expenses including ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}.`;
+          }
+        }
+      } catch (error) {
+        console.error('Error generating LLM content:', error);
+        
+        // Provide fallback values
+        // Trip summary fallback
+        const tripSummaryFallback = tripData 
+          ? `This report covers expenses for trip "${tripData.name}" with a total of ${expenses.length} expenses amounting to ${formatCurrency(totalExpenses)}.`
+          : `This report covers all expenses with a total of ${expenses.length} entries amounting to ${formatCurrency(totalExpenses)}.`;
+        
+        // Category analysis fallback
+        const topCategory = Object.entries(expenseTypeAmount)
+          .sort(([, a], [, b]) => b - a)[0] || ['other', 0];
+        
+        const categoryAnalysisFallback = `The largest expense category is ${topCategory[0]} at ${formatCurrency(topCategory[1])}, representing ${Math.round((topCategory[1] / totalExpenses) * 100)}% of total expenses.`;
+        
+        // Set fallback values
+        variables['llm.report.summary'] = tripSummaryFallback;
+        variables['llm.categories.analysis'] = categoryAnalysisFallback;
+        variables['llm.trip.summary'] = tripSummaryFallback;
+        variables['llm.expenses.summary'] = tripSummaryFallback;
+        
+        // Description summary fallback
+        const descriptionSummaryFallback = `Summary of ${expenses.length} expenses including ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}.`;
+        variables['llm.description.summary'] = descriptionSummaryFallback;
+      }
+      
+      console.log('Generated template variables:', JSON.stringify(variables, null, 2));
+      return variables;
+    };
+    
     // Special handling for templates
     if (isUsingTemplate) {
         console.log('Using template workbook, finding worksheets to use');
+        
+        // Process template variables first - need to do this before clearing content
+        // This allows for preserving variables in header rows
+        const templateVariables = await buildTemplateVariables();
+        
+        // Process all worksheets for variable substitution
+        console.log('Processing variable substitution in all worksheets');
+        workbook.worksheets.forEach(sheet => {
+            processWorksheet(sheet, templateVariables);
+        });
         
         // Find the most appropriate sheets to use in the template
         // For a template, we want to be more flexible and use whatever sheets are there

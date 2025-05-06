@@ -185,6 +185,9 @@ Try using a different image or converting the current image to a standard format
       // Common receipt type entity types
       type: ['receipt_type', 'expense_category', 'purchase_category', 'transaction_type', 'payment_type', 'expense_type'],
       
+      // Common description/memo entity types
+      description: ['description', 'memo', 'notes', 'comment', 'purpose', 'reason', 'line_item_description', 'purchase_description', 'invoice_description', 'service_description', 'item_description', 'transaction_description'],
+      
       // Common tax entity types
       tax: ['tax_amount', 'vat_amount', 'tax', 'vat', 'gst', 'sales_tax', 'tax_total']
     };
@@ -321,6 +324,11 @@ Try using a different image or converting the current image to a standard format
           extractedData.taxAmount = numericValue;
         }
       }
+      else if (entityMap.description.includes(entityType)) {
+        console.log(`Found description: ${normalizedValue}`);
+        // Store the description 
+        extractedData.description = normalizedValue;
+      }
       else if (entityMap.location.includes(entityType)) {
         console.log(`Found location entity: ${normalizedValue}`);
         
@@ -443,6 +451,38 @@ Try using a different image or converting the current image to a standard format
     if (!extractedData.location) {
       extractedData.location = { city: '', state: '', country: '' };
       console.log(`Created empty location object as fallback`);
+    }
+    
+    // If no description was found, try to extract or create one from available information
+    if (!extractedData.description) {
+      console.log('No description found, attempting to create one from context');
+      
+      // Try to create a description from vendor and items if available
+      if (extractedData.vendor && extractedData.items && extractedData.items.length > 0) {
+        // Use first few items to create description
+        const itemDescriptions = extractedData.items
+          .slice(0, 2)
+          .map(item => item.name)
+          .join(', ');
+          
+        extractedData.description = `Purchase at ${extractedData.vendor}: ${itemDescriptions}${extractedData.items.length > 2 ? '...' : ''}`;
+        console.log(`Created description from vendor and items: ${extractedData.description}`);
+      } 
+      // If no items but we have vendor and expense type
+      else if (extractedData.vendor && extractedData.expenseType) {
+        extractedData.description = `${extractedData.expenseType.charAt(0).toUpperCase() + extractedData.expenseType.slice(1)} expense at ${extractedData.vendor}`;
+        console.log(`Created description from vendor and expense type: ${extractedData.description}`);
+      }
+      // Last resort, use the vendor name
+      else if (extractedData.vendor) {
+        extractedData.description = `Purchase at ${extractedData.vendor}`;
+        console.log(`Created minimal description from vendor: ${extractedData.description}`);
+      }
+      // If all else fails, just use a generic description
+      else {
+        extractedData.description = 'Expense based on receipt';
+        console.log('Using generic description fallback');
+      }
     } else if (typeof extractedData.location === 'string') {
       // Convert string location to object if needed
       const locationString = extractedData.location;
