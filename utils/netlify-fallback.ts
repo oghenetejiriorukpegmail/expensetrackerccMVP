@@ -1,5 +1,30 @@
-import { useRuntimeConfig } from '#app';
 import { ExtractedReceipt } from './ai-processing';
+
+// Set up runtime config for both server and client environments
+// without using Vue app aliases that aren't allowed in server runtime
+let runtimeConfig: any;
+
+// For server-side, use environment variables directly
+if (typeof process !== 'undefined' && process.env) {
+  runtimeConfig = {
+    public: {
+      // Any config variables needed for this file
+    }
+  };
+} else {
+  // For client-side, try to get the config from window
+  try {
+    // Note: We don't use any direct imports from '#app' which would cause
+    // issues with Netlify's server-side rendering process
+    // Instead, rely on global window object if we're in a browser
+    if (typeof window !== 'undefined' && window.__NUXT__?.config) {
+      runtimeConfig = window.__NUXT__.config;
+    }
+  } catch (e) {
+    console.warn('Unable to get runtime config, using defaults');
+    runtimeConfig = { public: {} };
+  }
+}
 
 /**
  * Process a receipt using the Netlify function fallback
@@ -10,7 +35,7 @@ import { ExtractedReceipt } from './ai-processing';
 export async function processReceiptWithNetlifyFallback(
   imageBase64: string
 ): Promise<ExtractedReceipt> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   
   console.log('Trying to process receipt with Netlify function fallback...');
   
