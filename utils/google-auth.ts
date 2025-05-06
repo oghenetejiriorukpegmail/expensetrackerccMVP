@@ -1,4 +1,21 @@
-import { useRuntimeConfig } from '#app';
+// Import runtime config in a way that's compatible with server-side rendering
+// and static site generation
+let runtimeConfig: any;
+try {
+  // For client-side
+  const { useRuntimeConfig } = require('#app');
+  runtimeConfig = useRuntimeConfig();
+} catch (e) {
+  // For server-side, use environment variables
+  runtimeConfig = {
+    public: {
+      googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
+      googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID,
+      openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY,
+      googleApiKey: process.env.GOOGLE_API_KEY || process.env.NUXT_PUBLIC_GOOGLE_API_KEY
+    }
+  };
+}
 
 // Token cache to avoid unnecessary requests
 interface TokenCache {
@@ -13,7 +30,7 @@ let tokenCache: TokenCache | null = null;
  * @returns Promise with the access token
  */
 export async function getGoogleAccessToken(): Promise<string> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   
   try {
     // Check if we have a valid cached token

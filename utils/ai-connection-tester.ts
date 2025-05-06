@@ -1,20 +1,42 @@
-;
 import { getGoogleAccessToken } from './google-auth';
 
 // Helper to get configuration in both server and client environments
 function getConfig() {
   try {
-    // Try to use Nuxt's useRuntimeConfig if available (client-side)
-    // @ts-ignore - Dynamic import for client-side
-    const { useRuntimeConfig } = require('#app');
-    return useRuntimeConfig();
+    // For client-side in browser environment
+    if (typeof window !== 'undefined') {
+      // @ts-ignore - Dynamic import for browser client
+      return window.$nuxt?.$config || {
+        public: {
+          googleProjectId: '',
+          googleProcessorId: '',
+          openRouterApiKey: ''
+        }
+      };
+    }
+    
+    // For server-side within Nuxt
+    try {
+      // @ts-ignore - Dynamic import for server-side Nuxt
+      const { useRuntimeConfig } = require('#imports');
+      return useRuntimeConfig();
+    } catch (e) {
+      // Fallback to env vars
+      return {
+        public: {
+          googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
+          googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID,
+          openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY
+        }
+      };
+    }
   } catch (e) {
-    // If not available, use process.env (server-side)
+    // Last resort fallback
     return {
       public: {
-        googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
-        googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID,
-        openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY
+        googleProjectId: '',
+        googleProcessorId: '',
+        openRouterApiKey: ''
       }
     };
   }
