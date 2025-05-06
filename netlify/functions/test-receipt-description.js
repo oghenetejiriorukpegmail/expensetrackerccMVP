@@ -125,6 +125,9 @@ exports.handler = async (event, context) => {
     // Parse request body
     const body = JSON.parse(event.body);
     
+    // Log keys from request body for debugging
+    console.log('Request body keys:', Object.keys(body));
+    
     if (!body || !body.receiptImage) {
       return {
         statusCode: 400,
@@ -136,14 +139,21 @@ exports.handler = async (event, context) => {
     }
 
     // Get API key from request or default to environment variable
-    const apiKey = body.apiKey || process.env.OPENROUTER_API_KEY;
+    // Check different common parameter names for the API key
+    const apiKey = body.apiKey || body.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+    
+    console.log('API Key Status:', {
+      fromRequest: !!(body.apiKey || body.openRouterApiKey),
+      fromEnvironment: !!process.env.OPENROUTER_API_KEY,
+      keyAvailable: !!apiKey
+    });
     
     if (!apiKey) {
       return {
         statusCode: 400,
         body: JSON.stringify({
           success: false,
-          message: 'OpenRouter API key is not provided'
+          message: 'OpenRouter API key is not provided in request or environment variables'
         })
       };
     }

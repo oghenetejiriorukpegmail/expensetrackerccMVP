@@ -491,7 +491,8 @@ async function testReceiptDescription() {
           },
           body: JSON.stringify({
             receiptImage: receiptImage.value,
-            apiKey: settings.value.openRouterApiKey
+            apiKey: settings.value.openRouterApiKey,
+            openRouterApiKey: settings.value.openRouterApiKey // Include both parameter names for flexibility
           })
         });
         
