@@ -376,15 +376,51 @@ async function testReceiptDescription() {
   receiptResult.value = null;
   
   try {
-    const response = await fetch('/api/test-receipt-description', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        receiptImage: receiptImage.value
-      })
-    });
+    // Try both API endpoints with fallback logic
+    let response;
+    let success = false;
+    
+    // First try the Netlify function in production or local API in development
+    const endpoints = [
+      '/.netlify/functions/test-receipt-description',
+      '/api/test-receipt-description'
+    ];
+    
+    let lastError = null;
+    
+    // Try each endpoint until one succeeds
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`Attempting to test receipt description via ${endpoint}...`);
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            receiptImage: receiptImage.value,
+            apiKey: settings.value.openRouterApiKey
+          })
+        });
+        
+        if (response.ok) {
+          success = true;
+          console.log(`Successfully received response from ${endpoint}`);
+          break;
+        } else {
+          const errorText = await response.text();
+          console.warn(`Failed to use ${endpoint}:`, response.status, errorText);
+          lastError = `${response.status}: ${errorText}`;
+        }
+      } catch (fetchError) {
+        console.warn(`Error fetching from ${endpoint}:`, fetchError);
+        lastError = fetchError.message;
+      }
+    }
+    
+    if (!success) {
+      throw new Error(`All endpoints failed. Last error: ${lastError}`);
+    }
     
     const data = await response.json();
     receiptResult.value = data;
