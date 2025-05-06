@@ -223,6 +223,11 @@
         </div>
       </div>
       
+      <!-- AI Settings Panel -->
+      <div class="md:col-span-3">
+        <AISettingsPanel />
+      </div>
+      
       <!-- Danger Zone -->
       <div class="md:col-span-3 bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-red-200 dark:border-red-900">
         <h2 class="text-lg font-semibold text-red-600 dark:text-red-400 mb-4">Danger Zone</h2>
@@ -274,6 +279,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useSupabaseUser, useSupabaseClient, navigateTo } from '#imports';
 import { useUserStore } from '~/stores/userStore';
+import AISettingsPanel from '~/components/AISettingsPanel.vue';
 
 // State
 const loading = ref(true);
