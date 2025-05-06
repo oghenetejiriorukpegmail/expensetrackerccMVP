@@ -1,4 +1,22 @@
-import { useRuntimeConfig } from '#app';
+// Import runtime config in a way that's compatible with server-side rendering
+// and static site generation
+let runtimeConfig: any;
+try {
+  // For client-side
+  const { useRuntimeConfig } = require('#app');
+  runtimeConfig = useRuntimeConfig();
+} catch (e) {
+  // For server-side, use environment variables
+  runtimeConfig = {
+    public: {
+      openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY,
+      geminiApiKey: process.env.GEMINI_API_KEY || process.env.NUXT_PUBLIC_GEMINI_API_KEY,
+      googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
+      googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID
+    }
+  };
+}
+
 import { processReceiptWithDocumentAI } from './document-ai';
 
 /**
@@ -337,7 +355,7 @@ export async function processOdometerWithAI(
   imageUrlOrBase64: string,
   retryConfig?: RetryConfig
 ): Promise<ExtractedOdometerReading | null> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   const useOpenRouter = false; // Disable OpenRouter fallback - only use Document AI
   
   // Validate input
@@ -452,7 +470,7 @@ export async function processOdometerWithAI(
 async function processWithOpenRouter(
   imageUrlOrBase64: string
 ): Promise<ExtractedReceipt | null> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   const apiKey = config.public.openRouterApiKey;
   
   console.log('OpenRouter API Key available:', !!apiKey);
@@ -843,7 +861,7 @@ async function processWithOpenRouter(
 async function processWithGemini(
   imageUrlOrBase64: string
 ): Promise<ExtractedReceipt | null> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   const apiKey = config.public.geminiApiKey;
   
   if (!apiKey) {
@@ -1047,7 +1065,7 @@ async function processWithGemini(
 async function processOdometerWithOpenRouter(
   imageUrlOrBase64: string
 ): Promise<ExtractedOdometerReading | null> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   const apiKey = config.public.openRouterApiKey;
   
   if (!apiKey) {
@@ -1411,7 +1429,7 @@ async function processOdometerWithOpenRouter(
 async function processOdometerWithGemini(
   imageUrlOrBase64: string
 ): Promise<ExtractedOdometerReading | null> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   const apiKey = config.public.geminiApiKey;
   
   if (!apiKey) {
@@ -1632,7 +1650,7 @@ export async function generateReceiptDescription(
   // Define the operation to be retried
   const generateDescription = async (): Promise<string> => {
     try {
-      const config = useRuntimeConfig();
+      const config = runtimeConfig;
       const apiKey = config.public.openRouterApiKey;
       
       if (!apiKey) {
