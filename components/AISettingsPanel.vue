@@ -71,6 +71,7 @@
             <input
               id="openrouter_key"
               v-model="openRouterKey"
+              @input="updateApiKey"
               type="password"
               class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 py-2 px-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               placeholder="Enter OpenRouter API key"
@@ -256,6 +257,16 @@ const openRouterMessage = ref('');
 const openRouterKey = ref('');
 const showOpenRouterKey = ref(false);
 
+// Settings object to store configuration
+const settings = ref({
+  openRouterApiKey: ''
+});
+
+// Update settings when the API key changes
+function updateOpenRouterKey() {
+  settings.value.openRouterApiKey = openRouterKey.value;
+}
+
 // State for receipt processing
 const receiptImage = ref(null);
 const receiptProcessing = ref(false);
@@ -271,6 +282,11 @@ const isAnyTesting = computed(() => {
 // Toggle API key visibility
 function toggleApiKeyVisibility() {
   showOpenRouterKey.value = !showOpenRouterKey.value;
+}
+
+// Watch for changes to the API key and update settings
+function updateApiKey() {
+  settings.value.openRouterApiKey = openRouterKey.value;
 }
 
 // Test Document AI connection
@@ -346,6 +362,9 @@ async function testOpenRouter() {
   openRouterStatus.value = 'loading';
   openRouterMessage.value = '';
   
+  // Update the settings with the current API key
+  updateApiKey();
+  
   try {
     // Try both API endpoints with fallback logic
     let response;
@@ -369,7 +388,7 @@ async function testOpenRouter() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            openRouterApiKey: openRouterKey.value
+            openRouterApiKey: settings.value.openRouterApiKey
           })
         });
         
@@ -444,6 +463,9 @@ async function testReceiptDescription() {
   
   receiptProcessing.value = true;
   receiptResult.value = null;
+  
+  // Update the settings with the current API key
+  updateApiKey();
   
   try {
     // Try both API endpoints with fallback logic
