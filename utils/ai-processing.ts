@@ -22,6 +22,7 @@ export interface ExtractedReceipt {
   expenseType?: string;
   taxAmount?: number;
   total?: number;
+  description?: string; // AI-generated description of the expense
   confidence: number;
   // Fields to track fallback responses
   _fallback?: boolean;
@@ -1608,6 +1609,175 @@ async function processOdometerWithGemini(
       error.message,
       true
     );
+  }
+}
+
+/**
+ * Generate a descriptive summary of a receipt using OpenRouter API
+ * @param receipt The extracted receipt data
+ * @param retryConfig Optional retry configuration
+ * @returns A descriptive summary of the receipt or null if processing fails
+ */
+export async function generateReceiptDescription(
+  receipt: ExtractedReceipt,
+  retryConfig?: RetryConfig
+): Promise<string | null> {
+  // Skip if receipt is empty or a fallback
+  if (receipt._fallback || !receipt.vendor) {
+    return null;
+  }
+
+  console.log('Generating receipt description using OpenRouter API...');
+
+  // Define the operation to be retried
+  const generateDescription = async (): Promise<string> => {
+    try {
+      const config = useRuntimeConfig();
+      const apiKey = config.public.openRouterApiKey;
+      
+      if (!apiKey) {
+        throw createAIError(
+          'OpenRouter API key is not set',
+          'auth_error',
+          401,
+          'No API key provided for OpenRouter',
+          false
+        );
+      }
+
+      // Construct a detailed prompt with receipt information
+      let prompt = `Generate a concise 1-2 sentence business-appropriate description explaining the purpose of this expense.
+      
+Receipt Information:
+- Vendor: ${receipt.vendor || 'Unknown'}
+- Amount: ${receipt.amount || 0} ${receipt.currency || 'USD'}
+- Date: ${receipt.date || 'Unknown'}
+- Location: ${typeof receipt.location === 'object' ? 
+  `${receipt.location.city || ''}, ${receipt.location.state || ''}, ${receipt.location.country || ''}` : 
+  receipt.location || 'Unknown'}
+- Expense Type: ${receipt.expenseType || 'Other'}
+`;
+
+      // Add items if available
+      if (receipt.items && receipt.items.length > 0) {
+        prompt += '\nPurchased Items:\n';
+        receipt.items.forEach(item => {
+          prompt += `- ${item.name}${item.quantity ? ` (Qty: ${item.quantity})` : ''}${item.price ? ` $${item.price}` : ''}\n`;
+        });
+      }
+
+      prompt += `
+Write a professional description that would be appropriate in a business expense report. 
+Focus on the business purpose of the expense. Keep it concise (1-2 sentences).
+Don't include the specific amount or date in the description.
+Don't start with phrases like "This expense is for" or "This receipt is for".
+Just provide the description text without any formatting or prefix.`;
+
+      console.log('Sending description generation request to OpenRouter...');
+      
+      // Make API request with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://expense-tracker.app',
+          'X-Title': 'Expense Tracker'
+        },
+        body: JSON.stringify({
+          model: 'qwen/qwen1.5-72b-chat',  // Use Qwen model for high-quality response
+          messages: [{
+            role: 'user',
+            content: prompt
+          }],
+          temperature: 0.3,  // Lower temperature for more focused output
+          max_tokens: 100    // Short response
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Handle HTTP errors
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        console.error('OpenRouter description generation error:', errorBody);
+        
+        throw createAIError(
+          `OpenRouter API error: ${response.status} ${response.statusText}`,
+          'api_error',
+          response.status,
+          errorBody.error?.message || 'Unknown API error',
+          response.status >= 500 // Only server errors are retryable
+        );
+      }
+
+      const data = await response.json();
+      
+      // Handle missing or invalid response data
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw createAIError(
+          'Invalid response from OpenRouter',
+          'invalid_response',
+          500,
+          'The API response did not contain expected data structure',
+          true
+        );
+      }
+
+      // Extract the description from the response
+      const description = data.choices[0].message.content.trim();
+      console.log('Generated description:', description);
+      
+      return description;
+    } catch (error) {
+      // Handle AbortController timeout
+      if (error.name === 'AbortError') {
+        throw createAIError(
+          'OpenRouter API request timed out',
+          'timeout',
+          408,
+          'The request took too long to complete',
+          true
+        );
+      }
+      
+      // Re-throw AIProcessingError instances
+      if ((error as AIProcessingError).code) {
+        throw error;
+      }
+      
+      // Handle other errors
+      throw createAIError(
+        'Error generating receipt description',
+        'api_call_error',
+        500,
+        error.message,
+        true
+      );
+    }
+  };
+
+  // Check if an error is retryable
+  const isRetryable = (error: unknown): boolean => {
+    const aiError = error as AIProcessingError;
+    return !!aiError.retryable || 
+           aiError.code === 'network_error' || 
+           aiError.code === 'rate_limit' || 
+           aiError.code === 'timeout';
+  };
+
+  try {
+    // Execute the operation with retries
+    const description = await withRetry(generateDescription, isRetryable, retryConfig || DEFAULT_RETRY_CONFIG);
+    return description;
+  } catch (error) {
+    console.error('Failed to generate receipt description:', error);
+    // Return null instead of throwing to make this non-critical
+    return null;
   }
 }
 

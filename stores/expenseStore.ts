@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { Expense, ExpenseType, CurrencyCode } from '~/types';
 import { useSupabaseClient } from '#imports';
 import { uploadFile } from '~/utils/supabase';
-import { processReceiptWithAI } from '~/utils/ai-processing';
+import { processReceiptWithAI, generateReceiptDescription } from '~/utils/ai-processing';
 
 /**
  * Helper function to normalize currency codes extracted from receipts
@@ -495,6 +495,17 @@ export const useExpenseStore = defineStore('expense', {
           expenseType = ExpenseType.MEALS;
         }
         
+        // Generate a description for the receipt using AI
+        let description = null;
+        try {
+          console.log('Generating receipt description...');
+          description = await generateReceiptDescription(extractedData);
+          console.log('Generated description:', description);
+        } catch (descError) {
+          console.warn('Failed to generate receipt description:', descError);
+          // Continue without description
+        }
+        
         return {
           vendor: extractedData.vendor || '',
           amount: amount || 0,
@@ -502,6 +513,7 @@ export const useExpenseStore = defineStore('expense', {
           date: extractedData.date ? new Date(extractedData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           location: location,
           expense_type: expenseType,
+          description: description || '',
           confidence: extractedData.confidence
         };
       } catch (error: any) {

@@ -1,0 +1,23 @@
+ACME COMPANY
+123 Main Street
+New York, NY 10001
+Tel: (212) 555-1234
+
+RECEIPT
+Date: 2025-04-15
+Transaction #: TX-12345
+
+Item 1: Office Supplies............$24.99
+Item 2: Conference Room Rental.....$150.00
+Item 3: Catering Service...........$75.50
+
+Subtotal: $250.49
+Tax (8.875%): $22.23
+---------------------------------
+TOTAL: $272.72
+
+Payment method: Credit Card VISA ****1234
+Approved: AUTH-5678
+
+Thank you for your business!
+Please keep this receipt for your records.

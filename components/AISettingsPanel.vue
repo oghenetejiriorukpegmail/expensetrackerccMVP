@@ -42,22 +42,15 @@
         
         <div class="mt-3">
           <p class="text-xs text-gray-600 dark:text-gray-400 mb-1">
-            Try uploading a test receipt to verify Document AI functionality:
+            Sample receipt for testing:
           </p>
           <div class="flex">
             <a 
-              href="https://raw.githubusercontent.com/google-research-datasets/Document-AI-Demo-Data/main/receipts/receipt1.jpg" 
-              target="_blank"
+              href="/samples/receipts/sample-receipt.svg" 
+              download="sample-receipt.svg"
               class="text-xs text-primary-600 dark:text-primary-400 mr-2 underline"
             >
-              Download Sample Receipt 1
-            </a>
-            <a 
-              href="https://raw.githubusercontent.com/google-research-datasets/Document-AI-Demo-Data/main/receipts/receipt2.jpg" 
-              target="_blank"
-              class="text-xs text-primary-600 dark:text-primary-400 underline"
-            >
-              Download Sample Receipt 2
+              Sample Receipt (Image)
             </a>
           </div>
         </div>
@@ -127,6 +120,116 @@
         </div>
       </div>
       
+      <!-- Receipt Description Test -->
+      <div>
+        <h3 class="text-md font-medium mb-2">Test Receipt Description Generation</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Upload a receipt to test AI-powered description generation
+        </p>
+        
+        <div class="mb-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
+          <div class="flex flex-col items-center text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            
+            <div class="mt-3">
+              <label class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                <span>Upload Sample Receipt</span>
+                <input 
+                  type="file" 
+                  accept="image/*,.pdf" 
+                  class="sr-only"
+                  @change="handleReceiptUpload"
+                />
+              </label>
+            </div>
+            
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Upload a receipt image (.jpg, .png) or PDF to test the AI receipt description feature.
+              You can use our <a href="/samples/receipts/sample-receipt.svg" download="sample-receipt.svg" class="text-primary-600 dark:text-primary-400 underline">sample receipt image</a>.
+            </p>
+          </div>
+        </div>
+        
+        <!-- Receipt preview if uploaded -->
+        <div v-if="receiptImage" class="mb-4 p-3 bg-gray-50 dark:bg-gray-750 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div class="mb-2 flex justify-center">
+            <img
+              v-if="receiptImage.startsWith('data:image')"
+              :src="receiptImage" 
+              alt="Receipt preview" 
+              class="max-h-40 w-auto object-contain border border-gray-200 dark:border-gray-700 rounded"
+            />
+            <div 
+              v-else 
+              class="h-20 w-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded"
+            >
+              <p class="text-sm text-gray-500 dark:text-gray-400">PDF Document</p>
+            </div>
+          </div>
+          
+          <div class="flex justify-center space-x-3">
+            <button
+              @click="testReceiptDescription"
+              :disabled="receiptProcessing"
+              class="text-sm px-3 py-1 bg-primary-600 hover:bg-primary-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span v-if="receiptProcessing">Processing...</span>
+              <span v-else>Generate Description</span>
+            </button>
+            <button
+              @click="clearReceipt"
+              :disabled="receiptProcessing"
+              class="text-sm px-3 py-1 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        
+        <!-- Receipt processing results -->
+        <div v-if="receiptResult" class="mt-4 p-4 bg-gray-50 dark:bg-gray-750 rounded-lg border border-gray-200 dark:border-gray-700">
+          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Results</h4>
+          
+          <!-- Extracted data -->
+          <div class="mb-3">
+            <h5 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Extracted Data
+              <span v-if="receiptResult.extractedData && receiptResult.extractedData._fallback" 
+                class="ml-2 inline-block px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
+                Fallback
+              </span>
+            </h5>
+            <div v-if="receiptResult.extractedData" class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              <ul class="list-disc list-inside pl-2 space-y-1">
+                <li>Vendor: {{ receiptResult.extractedData.vendor || 'Unknown' }}</li>
+                <li>Amount: {{ receiptResult.extractedData.amount || 0 }}</li>
+                <li>Date: {{ receiptResult.extractedData.date || 'Unknown' }}</li>
+                <li>Type: {{ receiptResult.extractedData.expenseType || 'Other' }}</li>
+                <li>Confidence: {{ Math.round((receiptResult.extractedData.confidence || 0) * 100) }}%</li>
+              </ul>
+            </div>
+            <div v-else class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              No data extracted from receipt
+            </div>
+          </div>
+          
+          <!-- Generated description -->
+          <div>
+            <h5 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              AI-Generated Description
+            </h5>
+            <div v-if="receiptResult.description" class="mt-1 p-3 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 text-sm rounded-md border border-green-100 dark:border-green-800">
+              {{ receiptResult.description }}
+            </div>
+            <div v-else class="mt-1 p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 text-sm rounded-md border border-red-100 dark:border-red-800">
+              Failed to generate description: {{ receiptResult.message }}
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <!-- Test All Button -->
       <div class="flex justify-end pt-4">
         <button
@@ -153,9 +256,16 @@ const openRouterMessage = ref('');
 const openRouterKey = ref('');
 const showOpenRouterKey = ref(false);
 
+// State for receipt processing
+const receiptImage = ref(null);
+const receiptProcessing = ref(false);
+const receiptResult = ref(null);
+
 // Computed properties
 const isAnyTesting = computed(() => {
-  return documentAIStatus.value === 'loading' || openRouterStatus.value === 'loading';
+  return documentAIStatus.value === 'loading' || 
+         openRouterStatus.value === 'loading' || 
+         receiptProcessing.value;
 });
 
 // Toggle API key visibility
@@ -228,6 +338,64 @@ async function testOpenRouter() {
   } catch (error) {
     openRouterStatus.value = 'error';
     openRouterMessage.value = `Error: ${error.message}`;
+  }
+}
+
+// Handle receipt file upload
+async function handleReceiptUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  receiptResult.value = null;
+  
+  // Read the file as base64
+  const reader = new FileReader();
+  reader.onload = () => {
+    receiptImage.value = reader.result;
+  };
+  reader.onerror = () => {
+    console.error('Error reading file');
+    receiptImage.value = null;
+  };
+  
+  // Read as data URL (base64)
+  reader.readAsDataURL(file);
+}
+
+// Clear receipt image and results
+function clearReceipt() {
+  receiptImage.value = null;
+  receiptResult.value = null;
+}
+
+// Test receipt description generation
+async function testReceiptDescription() {
+  if (!receiptImage.value) return;
+  
+  receiptProcessing.value = true;
+  receiptResult.value = null;
+  
+  try {
+    const response = await fetch('/api/test-receipt-description', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        receiptImage: receiptImage.value
+      })
+    });
+    
+    const data = await response.json();
+    receiptResult.value = data;
+  } catch (error) {
+    console.error('Error testing receipt description:', error);
+    receiptResult.value = {
+      success: false,
+      message: `Error: ${error.message || 'Unknown error'}`
+    };
+  } finally {
+    receiptProcessing.value = false;
   }
 }
 

@@ -456,7 +456,9 @@ exports.handler = async (event, context) => {
         },
         body: JSON.stringify({
           receipt: processedReceipt,
-          message: 'Receipt processed successfully with Document AI'
+          message: 'Receipt processed successfully with Document AI',
+          // Flag that the client should generate a description
+          generateDescription: true
         })
       };
     } catch (authError) {

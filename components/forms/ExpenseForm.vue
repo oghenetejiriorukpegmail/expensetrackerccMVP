@@ -287,6 +287,7 @@
                 <li v-if="extractedData.amount" class="slide-in-right" style="animation-delay: 0.2s;">Amount: {{ extractedData.amount }}</li>
                 <li v-if="extractedData.date" class="slide-in-right" style="animation-delay: 0.3s;">Date: {{ extractedData.date }}</li>
                 <li v-if="extractedData.expenseType" class="slide-in-right" style="animation-delay: 0.4s;">Type: {{ extractedData.expenseType }}</li>
+                <li v-if="extractedData.description" class="slide-in-right" style="animation-delay: 0.5s;">Description: {{ extractedData.description }}</li>
               </ul>
             </div>
             <div class="mt-3">
@@ -521,6 +522,7 @@ function applyExtractedData() {
   if (data.date) form.value.date = data.date;
   if (data.expense_type) form.value.expense_type = data.expense_type;
   if (data.location) form.value.location = data.location;
+  if (data.description) form.value.description = data.description;
   
   // Clear extracted data after applying
   extractedData.value = null;
