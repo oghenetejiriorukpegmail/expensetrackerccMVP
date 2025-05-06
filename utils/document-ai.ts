@@ -1,6 +1,24 @@
 import { ExtractedReceipt } from './ai-processing';
-import { useRuntimeConfig } from '#app';
 import { getGoogleAccessToken } from './google-auth';
+
+// Import runtime config in a way that's compatible with server-side rendering
+// and static site generation
+let runtimeConfig: any;
+try {
+  // For client-side
+  const { useRuntimeConfig } = require('#app');
+  runtimeConfig = useRuntimeConfig();
+} catch (e) {
+  // For server-side, use environment variables
+  runtimeConfig = {
+    public: {
+      openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY,
+      geminiApiKey: process.env.GEMINI_API_KEY || process.env.NUXT_PUBLIC_GEMINI_API_KEY,
+      googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
+      googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID
+    }
+  };
+}
 
 /**
  * Process a receipt image with Google Document AI
@@ -11,7 +29,7 @@ import { getGoogleAccessToken } from './google-auth';
 export async function processReceiptWithDocumentAI(
   imageBase64: string
 ): Promise<ExtractedReceipt> {
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   
   // Prepare the image data
   let base64Data = imageBase64;
