@@ -142,7 +142,7 @@ export async function testOpenRouterConnection(apiKey?: string): Promise<{succes
     const config = getConfig();
     
     // Use provided API key or get from config
-    const openRouterApiKey = apiKey || config.public.openRouterApiKey || "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";
+    const openRouterApiKey = apiKey || config.public.openRouterApiKey;
     
     if (!openRouterApiKey) {
       return { 
