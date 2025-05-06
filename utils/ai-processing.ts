@@ -1706,7 +1706,7 @@ Just provide the description text without any formatting or prefix.`;
           'X-Title': 'Expense Tracker'
         },
         body: JSON.stringify({
-          model: 'qwen/qwen1.5-72b-chat',  // Use Qwen model for high-quality response
+          model: 'qwen/qwen3-30b-a3b:free',  // Use Qwen 3 model (free tier)
           messages: [{
             role: 'user',
             content: prompt
