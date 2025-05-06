@@ -65,8 +65,11 @@
         
         <div class="mb-3">
           <label for="openrouter_key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            API Key
+            API Key (For Server Configuration)
           </label>
+          <p class="text-xs text-gray-500 mb-1">
+            This should be set in your environment variables on the server, not in the client
+          </p>
           <div class="flex items-center">
             <input
               id="openrouter_key"
@@ -388,7 +391,9 @@ async function testOpenRouter() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            openRouterApiKey: settings.value.openRouterApiKey
+            // Note: API keys should be managed server-side through environment variables
+            // We're intentionally not sending the API key from the client for security
+            testOnly: true
           })
         });
         
@@ -491,8 +496,8 @@ async function testReceiptDescription() {
           },
           body: JSON.stringify({
             receiptImage: receiptImage.value,
-            apiKey: settings.value.openRouterApiKey,
-            openRouterApiKey: settings.value.openRouterApiKey // Include both parameter names for flexibility
+            // Note: API keys should be managed server-side only
+            testOnly: true
           })
         });
         

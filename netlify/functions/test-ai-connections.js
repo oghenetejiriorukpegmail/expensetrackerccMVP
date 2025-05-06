@@ -85,13 +85,13 @@ async function testOpenRouterConnection(apiKey) {
   try {
     console.log('Testing connection to OpenRouter API...');
     
-    // Use provided API key or from environment
-    const openRouterApiKey = apiKey || process.env.OPENROUTER_API_KEY;
+    // For security, only use keys from environment variables
+    const openRouterApiKey = process.env.OPENROUTER_API_KEY;
     
     if (!openRouterApiKey) {
       return { 
         success: false, 
-        message: 'Missing OpenRouter API key' 
+        message: 'OpenRouter API key not configured in server environment variables' 
       };
     }
     

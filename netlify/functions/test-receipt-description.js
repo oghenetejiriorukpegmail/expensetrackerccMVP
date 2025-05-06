@@ -138,22 +138,18 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Get API key from request or default to environment variable
-    // Check different common parameter names for the API key
-    const apiKey = body.apiKey || body.openRouterApiKey || process.env.OPENROUTER_API_KEY;
+    // For security, we no longer log or use API keys from the client
+    // Only use API keys from environment variables
+    const apiKey = process.env.OPENROUTER_API_KEY;
     
-    console.log('API Key Status:', {
-      fromRequest: !!(body.apiKey || body.openRouterApiKey),
-      fromEnvironment: !!process.env.OPENROUTER_API_KEY,
-      keyAvailable: !!apiKey
-    });
+    console.log('Using environment variables for API authentication');
     
     if (!apiKey) {
       return {
         statusCode: 400,
         body: JSON.stringify({
           success: false,
-          message: 'OpenRouter API key is not provided in request or environment variables'
+          message: 'API key is not configured in server environment variables'
         })
       };
     }
