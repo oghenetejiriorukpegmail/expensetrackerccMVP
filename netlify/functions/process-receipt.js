@@ -446,7 +446,33 @@ exports.handler = async (event, context) => {
       // Process the entities to extract receipt data
       const processedReceipt = processDocumentAIEntities(document, entities);
       
-      // Return the processed receipt
+      // Generate a description directly using OpenRouter API
+      let description = null;
+      try {
+        // Use the Netlify function for description generation by passing the processed receipt data
+        const descriptionResponse = await fetch('/.netlify/functions/test-receipt-description', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            documentAiData: processedReceipt
+          })
+        });
+        
+        if (descriptionResponse.ok) {
+          const descriptionData = await descriptionResponse.json();
+          description = descriptionData.description;
+          console.log('Generated description from Document AI data:', description);
+        } else {
+          console.error('Failed to generate description:', await descriptionResponse.text());
+        }
+      } catch (descError) {
+        console.error('Error generating description:', descError);
+        // Don't fail the whole request if description generation fails
+      }
+      
+      // Return the processed receipt with description
       return {
         statusCode: 200,
         headers: {
@@ -457,8 +483,9 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           receipt: processedReceipt,
           message: 'Receipt processed successfully with Document AI',
-          // Flag that the client should generate a description
-          generateDescription: true
+          description: description,
+          // Include flag for backward compatibility
+          generateDescription: description === null
         })
       };
     } catch (authError) {

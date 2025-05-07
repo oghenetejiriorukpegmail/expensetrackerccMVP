@@ -128,16 +128,6 @@ exports.handler = async (event, context) => {
     // Log keys from request body for debugging
     console.log('Request body keys:', Object.keys(body));
     
-    if (!body || !body.receiptImage) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          success: false,
-          message: 'No receipt image provided'
-        })
-      };
-    }
-
     // For security, we no longer log or use API keys from the client
     // Only use API keys from environment variables
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -154,25 +144,39 @@ exports.handler = async (event, context) => {
       };
     }
     
-    // Get mock data for testing or extract receipt info
+    // Check for receipt data from Document AI or receiptImage
     let receiptData;
-    if (body.mockData) {
-      // Use provided mock data for testing
-      receiptData = body.mockData;
+    
+    if (body.documentAiData) {
+      console.log('Using receipt data from Document AI');
+      receiptData = body.documentAiData;
     } else if (body.receiptDetails) {
-      // Use pre-extracted receipt details
+      console.log('Using pre-extracted receipt details');
       receiptData = body.receiptDetails;
+    } else if (body.mockData) {
+      console.log('Using mock data for testing');
+      receiptData = body.mockData;
+    } else if (!body.receiptImage) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          success: false,
+          message: 'No receipt data or image provided'
+        })
+      };
     } else {
-      // For a real implementation, we would process the image here
-      // But that would require Document AI or similar service
+      // Use receiptImage as a fallback, but log that we should pass processed data instead
+      console.log('WARNING: Received raw image instead of processed Document AI data');
       receiptData = {
-        vendor: 'Test Vendor',
-        amount: 42.99,
+        vendor: 'Receipt',
+        amount: 0,
         currency: 'USD',
         date: new Date().toISOString().split('T')[0],
-        location: { city: 'Test City', state: 'TS', country: 'USA' },
-        expenseType: 'business',
-        confidence: 0.95
+        location: { city: '', state: '', country: '' },
+        expenseType: 'other',
+        confidence: 0.5,
+        _fallback: true,
+        _fallbackReason: 'Using default data because Document AI data was not provided'
       };
     }
     
