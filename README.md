@@ -53,6 +53,10 @@ A comprehensive expense tracking application built with Nuxt 3, Supabase, and Vu
 
 The application requires a Supabase database with specific tables and RLS policies. See [README-STORAGE-FIX.md](./README-STORAGE-FIX.md) for detailed SQL setup instructions.
 
+## Deployment
+
+For instructions on deploying this application to Netlify, see [NETLIFY-DEPLOYMENT.md](./NETLIFY-DEPLOYMENT.md).
+
 ## Project Structure
 
 - `assets/`: CSS and static assets
