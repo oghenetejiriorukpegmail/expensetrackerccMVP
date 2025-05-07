@@ -1,6 +1,99 @@
 // Actual Document AI receipt processing function
 const { GoogleAuth } = require('google-auth-library');
 
+/**
+ * Simple function to make a request to OpenRouter API
+ * @param {string} apiKey - The OpenRouter API key
+ * @param {object} extractedReceipt - The extracted receipt data
+ * @returns {Promise<string>} - The generated description
+ */
+async function generateReceiptDescription(apiKey, extractedReceipt) {
+  if (!apiKey) {
+    throw new Error('OpenRouter API key is not provided');
+  }
+  
+  // Skip if receipt is empty or incomplete
+  if (!extractedReceipt || !extractedReceipt.vendor) {
+    throw new Error('Receipt data is incomplete');
+  }
+  
+  console.log('Generating receipt description using OpenRouter API...');
+  
+  // Construct a detailed prompt with receipt information
+  let prompt = `Generate a concise 1-2 sentence business-appropriate description explaining the purpose of this expense.
+  
+Receipt Information:
+- Vendor: ${extractedReceipt.vendor || 'Unknown'}
+- Amount: ${extractedReceipt.amount || 0} ${extractedReceipt.currency || 'USD'}
+- Date: ${extractedReceipt.date || 'Unknown'}
+- Location: ${typeof extractedReceipt.location === 'object' ? 
+  `${extractedReceipt.location.city || ''}, ${extractedReceipt.location.state || ''}, ${extractedReceipt.location.country || ''}` : 
+  extractedReceipt.location || 'Unknown'}
+- Expense Type: ${extractedReceipt.expenseType || 'Other'}
+`;
+
+  // Add items if available
+  if (extractedReceipt.items && extractedReceipt.items.length > 0) {
+    prompt += '\nPurchased Items:\n';
+    extractedReceipt.items.forEach(item => {
+      prompt += `- ${item.name}${item.quantity ? ` (Qty: ${item.quantity})` : ''}${item.price ? ` $${item.price}` : ''}\n`;
+    });
+  }
+
+  prompt += `
+Write a professional description that would be appropriate in a business expense report. 
+Focus on the business purpose of the expense. Keep it concise (1-2 sentences).
+Don't include the specific amount or date in the description.
+Don't start with phrases like "This expense is for" or "This receipt is for".
+Just provide the description text without any formatting or prefix.`;
+
+  try {
+    // Make API request to OpenRouter
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://expense-tracker.app',
+        'X-Title': 'Expense Tracker'
+      },
+      body: JSON.stringify({
+        model: 'qwen/qwen3-30b-a3b:free',  // Use Qwen 3 model (free tier)
+        messages: [{
+          role: 'user',
+          content: prompt
+        }],
+        temperature: 0.3,  // Lower temperature for more focused output
+        max_tokens: 100    // Short response
+      })
+    });
+    
+    // Handle HTTP errors
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      console.error('OpenRouter description generation error:', errorBody);
+      
+      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    // Handle missing or invalid response data
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response from OpenRouter');
+    }
+
+    // Extract the description from the response
+    const description = data.choices[0].message.content.trim();
+    console.log('Generated description:', description);
+    
+    return description;
+  } catch (error) {
+    console.error('Error generating receipt description:', error);
+    throw error;
+  }
+}
+
 exports.handler = async (event, context) => {
   // Handle CORS preflight requests
   if (event.httpMethod === 'OPTIONS') {
@@ -449,23 +542,21 @@ exports.handler = async (event, context) => {
       // Generate a description directly using OpenRouter API
       let description = null;
       try {
-        // Use the Netlify function for description generation by passing the processed receipt data
-        const descriptionResponse = await fetch('/.netlify/functions/test-receipt-description', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            documentAiData: processedReceipt
-          })
-        });
+        // Check if we have the OpenRouter API key directly
+        const apiKey = process.env.OPENROUTER_API_KEY;
         
-        if (descriptionResponse.ok) {
-          const descriptionData = await descriptionResponse.json();
-          description = descriptionData.description;
-          console.log('Generated description from Document AI data:', description);
+        if (apiKey) {
+          // Directly call the generateReceiptDescription function
+          try {
+            console.log('Generating description directly using OpenRouter API');
+            // Import the function we've already defined
+            description = await generateReceiptDescription(apiKey, processedReceipt);
+            console.log('Generated description directly:', description);
+          } catch (directError) {
+            console.error('Error generating description directly:', directError);
+          }
         } else {
-          console.error('Failed to generate description:', await descriptionResponse.text());
+          console.log('No OpenRouter API key available for direct description generation');
         }
       } catch (descError) {
         console.error('Error generating description:', descError);
