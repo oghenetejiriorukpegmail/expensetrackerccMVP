@@ -14,22 +14,20 @@
         </div>
         
         <nav class="hidden md:flex items-center space-x-1">
-          <NuxtLink 
+          <NuxtLink
             v-if="supabaseUser"
-            v-for="(link, index) in navLinks" 
+            v-for="(link, index) in navLinks"
             :key="link.to"
-            :to="link.to" 
-            class="relative px-4 py-2 text-gray-600 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400 font-medium rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 overflow-hidden"
-            :class="[`slide-in-top-${index + 1}`]"
-            active-class="text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20"
+            :to="link.to"
+            class="relative group px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 rounded-md transition-all duration-200 ease-out hover:bg-primary-50 dark:hover:bg-gray-700 hover:text-primary-600 dark:hover:text-primary-400 animate-in fade-in zoom-in-95"
+            :style="{ animationDelay: `${index * 100}ms` }"
+            active-class="bg-primary-100 dark:bg-gray-700 text-primary-700 dark:text-primary-300"
           >
             <div class="flex items-center space-x-2">
               <component :is="link.icon" class="h-5 w-5" />
               <span>{{ link.text }}</span>
             </div>
-            
-            <!-- Animated underline effect -->
-            <span class="absolute bottom-0 left-0 w-full h-0.5 bg-primary-500 dark:bg-primary-400 transform scale-x-0 transition-transform origin-left group-hover:scale-x-100"></span>
+            <span class="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-primary-500 dark:bg-primary-400 transition-all duration-300 group-hover:w-4/5"></span>
           </NuxtLink>
         </nav>
         
@@ -129,10 +127,10 @@
             v-for="(link, index) in navLinks" 
             :key="link.to"
             :to="link.to" 
-            class="flex items-center space-x-2 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 slide-in-right"
-            :style="`animation-delay: ${index * 0.05}s`"
+            class="flex items-center space-x-2 px-3 py-3 rounded-lg text-gray-700 dark:text-gray-200 font-medium hover:bg-primary-50 dark:hover:bg-gray-700 hover:text-primary-600 dark:hover:text-primary-400 transition-colors duration-150 animate-in slide-in-from-right-8 fade-in"
+            :style="{ animationDelay: `${index * 75}ms`, animationDuration: '300ms' }"
             @click="isMobileMenuOpen = false"
-            active-class="text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20"
+            active-class="bg-primary-100 dark:bg-gray-700 text-primary-700 dark:text-primary-300"
           >
             <component :is="link.icon" class="h-5 w-5" />
             <span>{{ link.text }}</span>
