@@ -48,7 +48,24 @@ Don't start with phrases like "This expense is for" or "This receipt is for".
 Just provide the description text without any formatting or prefix.`;
 
   try {
+    // Log the API key (truncated for security)
+    const maskedKey = apiKey ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 5)}` : 'undefined';
+    console.log(`Using OpenRouter API key: ${maskedKey}`);
+    
+    // Log the request payload (without the prompt for brevity)
+    const requestPayload = {
+      model: 'anthropic/claude-3-haiku-20240307',
+      messages: [{
+        role: 'user',
+        content: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt
+      }],
+      temperature: 0.3,
+      max_tokens: 100
+    };
+    console.log('OpenRouter request payload:', JSON.stringify(requestPayload));
+    
     // Make API request to OpenRouter
+    console.log(`Starting OpenRouter API request at ${new Date().toISOString()}`);
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -58,7 +75,7 @@ Just provide the description text without any formatting or prefix.`;
         'X-Title': 'Expense Tracker'
       },
       body: JSON.stringify({
-        model: 'qwen/qwen3-30b-a3b:free',  // Use Qwen 3 model (free tier)
+        model: 'anthropic/claude-3-haiku-20240307',  // Try Claude Haiku instead of Qwen
         messages: [{
           role: 'user',
           content: prompt
@@ -67,24 +84,45 @@ Just provide the description text without any formatting or prefix.`;
         max_tokens: 100    // Short response
       })
     });
+    console.log(`Received OpenRouter API response at ${new Date().toISOString()} with status: ${response.status}`);
     
     // Handle HTTP errors
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      console.error('OpenRouter description generation error:', errorBody);
+      let errorDetails = '';
+      try {
+        const errorBody = await response.json();
+        errorDetails = JSON.stringify(errorBody);
+        console.error('OpenRouter description generation error:', errorDetails);
+      } catch (parseError) {
+        const errorText = await response.text();
+        errorDetails = errorText;
+        console.error('OpenRouter error (non-JSON):', errorText);
+      }
       
-      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText} - ${errorDetails}`);
     }
 
     const data = await response.json();
     
+    // Log the full response for debugging
+    console.log('OpenRouter API response:', JSON.stringify(data, null, 2));
+    
     // Handle missing or invalid response data
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid response structure from OpenRouter:', JSON.stringify(data));
       throw new Error('Invalid response from OpenRouter');
     }
 
-    // Extract the description from the response
-    const description = data.choices[0].message.content.trim();
+    // Extract the description from the response with more detailed logging
+    const message = data.choices[0].message;
+    console.log('OpenRouter message:', JSON.stringify(message));
+    
+    if (!message.content || message.content.trim() === '') {
+      console.error('Empty content returned from OpenRouter');
+      throw new Error('Empty description from OpenRouter');
+    }
+    
+    const description = message.content.trim();
     console.log('Generated description:', description);
     
     return description;
