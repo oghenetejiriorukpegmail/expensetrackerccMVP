@@ -118,7 +118,8 @@ export async function processReceiptWithNetlifyFallback(
       _fallback: receipt._fallback || true,
       _fallbackReason: receipt._fallbackReason || 'Used Netlify function fallback',
       _technicalDetails: receipt._technicalDetails || undefined,
-      description: data.description || null // Add description from serverless function response
+      // Check multiple possible sources for the description
+      description: receipt.description || data.description || null 
     };
     
     // If this is a fallback response, log detailed technical information

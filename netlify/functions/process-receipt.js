@@ -702,6 +702,11 @@ exports.handler = async (event, context) => {
         // Don't fail the whole request if description generation fails
       }
       
+      // If we have a description, add it directly to the processed receipt object as well
+      if (description) {
+        processedReceipt.description = description;
+      }
+      
       // Return the processed receipt with description
       return {
         statusCode: 200,
