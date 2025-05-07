@@ -1,44 +1,33 @@
 import { getGoogleAccessToken } from './google-auth';
 
-// Helper to get configuration in both server and client environments
-function getConfig() {
-  try {
-    // For client-side in browser environment
-    if (typeof window !== 'undefined') {
-      // @ts-ignore - Dynamic import for browser client
-      return window.$nuxt?.$config || {
-        public: {
-          googleProjectId: '',
-          googleProcessorId: '',
-          openRouterApiKey: ''
-        }
-      };
+// Import runtime config in a way that's compatible with server-side rendering
+// and static site generation
+let runtimeConfig: any;
+try {
+  // For client-side
+  const { useRuntimeConfig } = require('#app');
+  runtimeConfig = useRuntimeConfig();
+} catch (e) {
+  // For server-side, use environment variables
+  runtimeConfig = {
+    public: {
+      googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
+      googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID,
+      openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY
     }
-    
-    // For server-side within Nuxt
+  };
+  
+  // If we're in browser environment, try to use window.$nuxt.$config as fallback
+  if (typeof window !== 'undefined') {
     try {
-      // @ts-ignore - Dynamic import for server-side Nuxt
-      const { useRuntimeConfig } = require('#imports');
-      return useRuntimeConfig();
-    } catch (e) {
-      // Fallback to env vars
-      return {
-        public: {
-          googleProjectId: process.env.GOOGLE_PROJECT_ID || process.env.NUXT_PUBLIC_GOOGLE_PROJECT_ID,
-          googleProcessorId: process.env.GOOGLE_PROCESSOR_ID || process.env.NUXT_PUBLIC_GOOGLE_PROCESSOR_ID,
-          openRouterApiKey: process.env.OPENROUTER_API_KEY || process.env.NUXT_PUBLIC_OPENROUTER_API_KEY
-        }
-      };
-    }
-  } catch (e) {
-    // Last resort fallback
-    return {
-      public: {
-        googleProjectId: '',
-        googleProcessorId: '',
-        openRouterApiKey: ''
+      // @ts-ignore - Dynamic import for browser client
+      const windowConfig = window.$nuxt?.$config;
+      if (windowConfig) {
+        runtimeConfig = windowConfig;
       }
-    };
+    } catch (windowError) {
+      // Ignore window access errors
+    }
   }
 }
 
@@ -49,7 +38,7 @@ function getConfig() {
 export async function testDocumentAIConnection(): Promise<{success: boolean, message: string}> {
   try {
     console.log('Testing connection to Google Document AI...');
-    const config = getConfig();
+    const config = runtimeConfig;
     
     // Validate configuration
     const projectId = config.public.googleProjectId;
@@ -139,7 +128,7 @@ export async function testDocumentAIConnection(): Promise<{success: boolean, mes
 export async function testOpenRouterConnection(apiKey?: string): Promise<{success: boolean, message: string}> {
   try {
     console.log('Testing connection to OpenRouter API...');
-    const config = getConfig();
+    const config = runtimeConfig;
     
     // Use provided API key or get from config
     const openRouterApiKey = apiKey || config.public.openRouterApiKey;

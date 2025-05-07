@@ -393,7 +393,6 @@ async function testOpenRouter() {
           body: JSON.stringify({
             // Note: API keys should be managed server-side through environment variables
             // We're intentionally not sending the API key from the client for security
-            testOnly: true
           })
         });
         
@@ -497,7 +496,6 @@ async function testReceiptDescription() {
           body: JSON.stringify({
             receiptImage: receiptImage.value,
             // Note: API keys should be managed server-side only
-            testOnly: true
           })
         });
         

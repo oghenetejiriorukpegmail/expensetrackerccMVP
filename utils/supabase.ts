@@ -1,5 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
-import { useRuntimeConfig } from '#app';
+
+// Import runtime config in a way that's compatible with server-side rendering
+// and static site generation
+let runtimeConfig: any;
+try {
+  // For client-side
+  const { useRuntimeConfig } = require('#app');
+  runtimeConfig = useRuntimeConfig();
+} catch (e) {
+  // For server-side, use environment variables
+  runtimeConfig = {
+    public: {
+      supabaseUrl: process.env.SUPABASE_URL || process.env.NUXT_PUBLIC_SUPABASE_URL,
+      supabaseKey: process.env.SUPABASE_KEY || process.env.NUXT_PUBLIC_SUPABASE_KEY
+    }
+  };
+}
 
 /**
  * Create a Supabase client with the credentials from the environment
@@ -21,7 +37,7 @@ export const createSupabaseClient = () => {
   }
   
   // Create new client only as fallback
-  const config = useRuntimeConfig();
+  const config = runtimeConfig;
   
   return createClient(
     config.public.supabaseUrl,
