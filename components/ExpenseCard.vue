@@ -27,6 +27,10 @@
           <p v-if="expense.description" class="text-sm text-gray-600 dark:text-gray-300 mt-1 line-clamp-2">
             {{ expense.description }}
           </p>
+          <!-- Debug description info (only visible during development) -->
+          <p v-if="false" class="text-xs text-red-500 mt-1">
+            Raw description: "{{ expense.description }}"
+          </p>
           
           <div class="flex flex-wrap items-center mt-2 text-sm text-gray-500 dark:text-gray-400">
             <span class="flex items-center mr-4 mb-1">

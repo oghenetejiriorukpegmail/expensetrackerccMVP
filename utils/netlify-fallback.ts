@@ -90,12 +90,17 @@ export async function processReceiptWithNetlifyFallback(
     
     const data = await response.json();
     
+    console.log('Raw Netlify response data:', JSON.stringify(data));
+    
     // Extract receipt data
     const receipt = data.receipt;
     
     if (!receipt) {
       throw new Error('No receipt data in response');
     }
+    
+    // Log the description directly from the response
+    console.log('Description from server response:', data.description);
     
     // Create a standardized receipt object
     const extractedData: ExtractedReceipt = {

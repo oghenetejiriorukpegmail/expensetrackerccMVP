@@ -512,7 +512,10 @@ export const useExpenseStore = defineStore('expense', {
           // Continue without description
         }
         
-        return {
+        // Prepare the result object with debugging for the description
+        console.log('Before creating result - description value:', description);
+        
+        const result = {
           vendor: extractedData.vendor || '',
           amount: amount || 0,
           currency: currency,
@@ -522,6 +525,9 @@ export const useExpenseStore = defineStore('expense', {
           description: description || '',
           confidence: extractedData.confidence
         };
+        
+        console.log('Final result object with description:', JSON.stringify(result));
+        return result;
       } catch (error: any) {
         this.aiProcessingError = error.message || 'Failed to process receipt';
         console.error('AI processing error:', error);
