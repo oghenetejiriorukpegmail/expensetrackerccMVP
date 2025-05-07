@@ -19,6 +19,57 @@ function createSupabaseClient() {
 }
 
 /**
+ * Generate a basic description when AI generation fails
+ * @param {object} receipt - The receipt data
+ * @returns {string} A basic description
+ */
+function generateFallbackDescription(receipt) {
+  if (!receipt || !receipt.vendor) {
+    return "Business expense";
+  }
+  
+  const vendor = receipt.vendor;
+  const location = receipt.location && typeof receipt.location === 'object' 
+    ? `${receipt.location.city || ''} ${receipt.location.state || ''}`.trim() 
+    : (receipt.location || '');
+  
+  let description = "";
+  
+  // Handle different expense types
+  switch(receipt.expenseType) {
+    case 'transportation':
+      description = location 
+        ? `${vendor} transportation in ${location}` 
+        : `${vendor} transportation expense`;
+      break;
+    case 'meals':
+      description = location 
+        ? `Business meal at ${vendor} in ${location}` 
+        : `Business meal at ${vendor}`;
+      break;
+    case 'accommodation':
+      description = location 
+        ? `${vendor} accommodation in ${location}` 
+        : `${vendor} accommodation expense`;
+      break;
+    case 'office':
+      description = `Office supplies from ${vendor}`;
+      break;
+    case 'entertainment':
+      description = location 
+        ? `Business entertainment at ${vendor} in ${location}` 
+        : `Business entertainment at ${vendor}`;
+      break;
+    default:
+      description = location 
+        ? `${vendor} business expense in ${location}` 
+        : `${vendor} business expense`;
+  }
+  
+  return description;
+}
+
+/**
  * Simple function to make a request to OpenRouter API
  * @param {string} apiKey - The OpenRouter API key
  * @param {object} extractedReceipt - The extracted receipt data
@@ -65,49 +116,85 @@ Don't start with phrases like "This expense is for" or "This receipt is for".
 Just provide the description text without any formatting or prefix.`;
 
   try {
-    // Make API request to OpenRouter
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://expense-tracker.app',
-        'X-Title': 'Expense Tracker'
-      },
-      body: JSON.stringify({
-        model: 'qwen/qwen3-30b-a3b:free',  // Use Qwen 3 model (free tier)
-        messages: [{
-          role: 'user',
-          content: prompt
-        }],
-        temperature: 0.3,  // Lower temperature for more focused output
-        max_tokens: 100    // Short response
-      })
-    });
+    // Add retry mechanism for the API call
+    const maxRetries = 2;
+    let attempt = 0;
     
-    // Handle HTTP errors
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      console.error('OpenRouter description generation error:', errorBody);
-      
-      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
-    }
+    while (attempt <= maxRetries) {
+      try {
+        // Make API request to OpenRouter
+        console.log(`Starting OpenRouter API request attempt ${attempt + 1}/${maxRetries + 1}`);
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://expense-tracker.app',
+            'X-Title': 'Expense Tracker'
+          },
+          body: JSON.stringify({
+            model: 'qwen/qwen3-30b-a3b:free',  // Use Qwen 3 model (free tier)
+            messages: [{
+              role: 'user',
+              content: prompt
+            }],
+            temperature: 0.3,  // Lower temperature for more focused output
+            max_tokens: 100    // Short response
+          })
+        });
+        
+        // Handle HTTP errors
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          console.error('OpenRouter description generation error:', errorBody);
+          
+          // If we get a 5xx error or a specific 429 (rate limit), retry
+          if (response.status >= 500 || response.status === 429) {
+            const waitTime = Math.pow(2, attempt) * 500; // Exponential backoff: 500ms, 1000ms, 2000ms
+            console.log(`Retryable error (${response.status}), waiting ${waitTime}ms before retry`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            attempt++;
+            continue;
+          }
+          
+          throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
+        }
 
-    const data = await response.json();
-    
-    // Handle missing or invalid response data
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Invalid response from OpenRouter');
-    }
+        const data = await response.json();
+        
+        // Handle missing or invalid response data
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+          throw new Error('Invalid response from OpenRouter');
+        }
 
-    // Extract the description from the response
-    const description = data.choices[0].message.content.trim();
-    console.log('Generated description:', description);
+        // Extract the description from the response
+        const description = data.choices[0].message.content.trim();
+        console.log('Generated description:', description);
+        
+        return description;
+      } catch (fetchError) {
+        // If this is a network error and we have retries left
+        if ((fetchError instanceof TypeError || fetchError.message.includes('network')) && attempt < maxRetries) {
+          const waitTime = Math.pow(2, attempt) * 500;
+          console.log(`Network error, waiting ${waitTime}ms before retry: ${fetchError.message}`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          attempt++;
+        } else {
+          // Either not a network error or out of retries
+          throw fetchError;
+        }
+      }
+    }
     
-    return description;
+    // If we get here, we've exhausted retries without success
+    throw new Error('Failed to get response after all retry attempts');
   } catch (error) {
     console.error('Error generating receipt description:', error);
-    throw error;
+    
+    // Generate fallback description instead of failing
+    const fallbackDescription = generateFallbackDescription(extractedReceipt);
+    console.log('Using fallback description due to error:', fallbackDescription);
+    return fallbackDescription;
   }
 }
 
@@ -195,11 +282,16 @@ exports.handler = async (event, context) => {
   } catch (error) {
     console.error('Error in function:', error);
     
+    // Use fallback description if there's an error
+    const fallbackDescription = "Business expense";
+    
     return {
-      statusCode: 500,
+      statusCode: 200, // Return 200 to prevent app breaking
       body: JSON.stringify({
-        success: false,
-        message: error.message || 'Unknown error occurred during receipt description test'
+        success: true,
+        description: fallbackDescription,
+        message: 'Using fallback description due to error',
+        error: error.message
       })
     };
   }

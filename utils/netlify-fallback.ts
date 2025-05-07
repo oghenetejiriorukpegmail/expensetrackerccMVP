@@ -105,13 +105,15 @@ export async function processReceiptWithNetlifyFallback(
       confidence: receipt.confidence || 0.85,
       currency: receipt.currency || 'USD',
       expenseType: receipt.expenseType || 'other',
+      expense_type: receipt.expenseType || 'other', // Add expense_type for form compatibility
       total: receipt.total || 0,
       items: receipt.items || [],
       location: receipt.location || { city: '', state: '', country: '' },
       taxAmount: receipt.taxAmount || 0,
       _fallback: receipt._fallback || true,
       _fallbackReason: receipt._fallbackReason || 'Used Netlify function fallback',
-      _technicalDetails: receipt._technicalDetails || undefined
+      _technicalDetails: receipt._technicalDetails || undefined,
+      description: data.description || null // Add description from serverless function response
     };
     
     // If this is a fallback response, log detailed technical information
