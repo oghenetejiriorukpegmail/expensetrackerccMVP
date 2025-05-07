@@ -2,6 +2,57 @@
 const { GoogleAuth } = require('google-auth-library');
 
 /**
+ * Generate a basic description when AI generation fails
+ * @param {object} receipt - The receipt data
+ * @returns {string} A basic description
+ */
+function generateFallbackDescription(receipt) {
+  if (!receipt || !receipt.vendor) {
+    return "Business expense";
+  }
+  
+  const vendor = receipt.vendor;
+  const location = receipt.location && typeof receipt.location === 'object' 
+    ? `${receipt.location.city || ''} ${receipt.location.state || ''}`.trim() 
+    : (receipt.location || '');
+  
+  let description = "";
+  
+  // Handle different expense types
+  switch(receipt.expenseType) {
+    case 'transportation':
+      description = location 
+        ? `${vendor} transportation in ${location}` 
+        : `${vendor} transportation expense`;
+      break;
+    case 'meals':
+      description = location 
+        ? `Business meal at ${vendor} in ${location}` 
+        : `Business meal at ${vendor}`;
+      break;
+    case 'accommodation':
+      description = location 
+        ? `${vendor} accommodation in ${location}` 
+        : `${vendor} accommodation expense`;
+      break;
+    case 'office':
+      description = `Office supplies from ${vendor}`;
+      break;
+    case 'entertainment':
+      description = location 
+        ? `Business entertainment at ${vendor} in ${location}` 
+        : `Business entertainment at ${vendor}`;
+      break;
+    default:
+      description = location 
+        ? `${vendor} business expense in ${location}` 
+        : `${vendor} business expense`;
+  }
+  
+  return description;
+}
+
+/**
  * Simple function to make a request to OpenRouter API
  * @param {string} apiKey - The OpenRouter API key
  * @param {object} extractedReceipt - The extracted receipt data
@@ -54,7 +105,7 @@ Just provide the description text without any formatting or prefix.`;
     
     // Log the request payload (without the prompt for brevity)
     const requestPayload = {
-      model: 'anthropic/claude-3-haiku-20240307',
+      model: 'qwen/qwen3-30b-a3b:free',
       messages: [{
         role: 'user',
         content: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt
@@ -64,27 +115,69 @@ Just provide the description text without any formatting or prefix.`;
     };
     console.log('OpenRouter request payload:', JSON.stringify(requestPayload));
     
-    // Make API request to OpenRouter
-    console.log(`Starting OpenRouter API request at ${new Date().toISOString()}`);
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://expense-tracker.app',
-        'X-Title': 'Expense Tracker'
-      },
-      body: JSON.stringify({
-        model: 'anthropic/claude-3-haiku-20240307',  // Try Claude Haiku instead of Qwen
-        messages: [{
-          role: 'user',
-          content: prompt
-        }],
-        temperature: 0.3,  // Lower temperature for more focused output
-        max_tokens: 100    // Short response
-      })
-    });
-    console.log(`Received OpenRouter API response at ${new Date().toISOString()} with status: ${response.status}`);
+    // Add retry mechanism for the API call
+    const maxRetries = 2;
+    let response = null;
+    let attempt = 0;
+    
+    while (attempt <= maxRetries) {
+      try {
+        // Make API request to OpenRouter
+        console.log(`Starting OpenRouter API request attempt ${attempt + 1}/${maxRetries + 1} at ${new Date().toISOString()}`);
+        response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://expense-tracker.app',
+            'X-Title': 'Expense Tracker'
+          },
+          body: JSON.stringify({
+            model: 'qwen/qwen3-30b-a3b:free',  // Using Qwen 3 model (free tier)
+            messages: [{
+              role: 'user',
+              content: prompt
+            }],
+            temperature: 0.3,  // Lower temperature for more focused output
+            max_tokens: 100    // Short response
+          })
+        });
+        console.log(`Received OpenRouter API response at ${new Date().toISOString()} with status: ${response.status}`);
+        
+        // If we get a success response, break out of the retry loop
+        if (response.ok) {
+          break;
+        }
+        
+        // If we get a 5xx error or a specific 429 (rate limit), retry
+        // Otherwise, for 4xx errors, break as they're generally client errors that won't be fixed by retrying
+        if (response.status >= 500 || response.status === 429) {
+          const waitTime = Math.pow(2, attempt) * 500; // Exponential backoff: 500ms, 1000ms, 2000ms
+          console.log(`Retryable error (${response.status}), waiting ${waitTime}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          attempt++;
+        } else {
+          // Client error (4xx), not retrying
+          console.log(`Non-retryable error status ${response.status}, not retrying`);
+          break;
+        }
+      } catch (fetchError) {
+        // Network errors are retryable
+        console.error(`Network error on attempt ${attempt + 1}:`, fetchError.message);
+        if (attempt < maxRetries) {
+          const waitTime = Math.pow(2, attempt) * 500;
+          console.log(`Waiting ${waitTime}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          attempt++;
+        } else {
+          throw fetchError; // Rethrow if we're out of retries
+        }
+      }
+    }
+    
+    if (!response) {
+      throw new Error('Failed to get response after all retry attempts');
+    }
     
     // Handle HTTP errors
     if (!response.ok) {
@@ -119,7 +212,11 @@ Just provide the description text without any formatting or prefix.`;
     
     if (!message.content || message.content.trim() === '') {
       console.error('Empty content returned from OpenRouter');
-      throw new Error('Empty description from OpenRouter');
+      
+      // Generate a simple fallback description rather than failing
+      const fallbackDescription = generateFallbackDescription(extractedReceipt);
+      console.log('Using fallback description:', fallbackDescription);
+      return fallbackDescription;
     }
     
     const description = message.content.trim();
@@ -128,7 +225,11 @@ Just provide the description text without any formatting or prefix.`;
     return description;
   } catch (error) {
     console.error('Error generating receipt description:', error);
-    throw error;
+    
+    // Generate fallback description instead of failing
+    const fallbackDescription = generateFallbackDescription(extractedReceipt);
+    console.log('Using fallback description due to error:', fallbackDescription);
+    return fallbackDescription;
   }
 }
 
