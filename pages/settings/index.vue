@@ -440,6 +440,34 @@ async function uploadTemplate() {
       settings.value.excel_template_url = templateUrl;
       templateFile.value = null;
       
+      // Trigger template preprocessing in the background
+      try {
+        if (supabaseUser.value?.id) {
+          const userId = supabaseUser.value.id;
+          
+          // Call the preprocessing function
+          const response = await fetch('/.netlify/functions/preprocess-template', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              templateUrl,
+              userId
+            })
+          });
+          
+          if (!response.ok) {
+            console.warn('Template preprocessing request failed:', await response.text());
+          } else {
+            console.log('Template preprocessing initiated successfully');
+          }
+        }
+      } catch (preprocessError) {
+        console.error('Error initiating template preprocessing:', preprocessError);
+        // Non-critical error, can continue without preprocessing
+      }
+      
       // Show success message in a real app
     }
   } catch (error) {

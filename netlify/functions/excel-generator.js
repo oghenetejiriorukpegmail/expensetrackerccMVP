@@ -269,13 +269,70 @@ exports.handler = async (event, context) => {
           
           isUsingTemplate = true;
           
-          // Analyze the template to extract variables and structure
-          templateAnalysis = await analyzeTemplate(workbook);
+          // Try to load pre-processed template analysis from Supabase
+          try {
+            const { data: userData } = await supabase.auth.getUser();
+            const userId = userData?.user?.id;
+            
+            if (userId) {
+              console.log('Looking for pre-processed template analysis');
+              const { data: analysisData, error: analysisError } = await supabase
+                .from('template_analysis')
+                .select('*')
+                .eq('template_url', templateUrl)
+                .eq('user_id', userId)
+                .maybeSingle();
+              
+              if (analysisError) {
+                console.error('Error fetching template analysis:', analysisError);
+              } else if (analysisData) {
+                console.log('Found pre-processed template analysis');
+                templateAnalysis = analysisData.analysis;
+                templateSchema = analysisData.schema;
+              }
+            }
+          } catch (analysisError) {
+            console.error('Error loading pre-processed analysis:', analysisError);
+          }
           
-          if (templateAnalysis) {
-            console.log('Template analysis complete:', 
-              `${templateAnalysis.variables.length} variables found,`,
-              `${templateAnalysis.worksheets.length} worksheets analyzed`);
+          // If no pre-processed analysis was found, trigger preprocessing for next time
+          // but continue with basic template processing for now
+          if (!templateAnalysis) {
+            console.log('No pre-processed analysis found, using basic template processing');
+            // Trigger template preprocessing in the background
+            try {
+              const { data: userData } = await supabase.auth.getUser();
+              const userId = userData?.user?.id;
+              
+              if (userId) {
+                // Don't await this - let it run in background
+                fetch('/.netlify/functions/preprocess-template', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    templateUrl,
+                    userId
+                  })
+                }).catch(err => console.error('Error triggering template preprocessing:', err));
+                
+                console.log('Triggered template preprocessing for future use');
+              }
+            } catch (error) {
+              console.error('Error triggering preprocessing:', error);
+            }
+            
+            // For now, just look for variable placeholders without full analysis
+            const placeholders = findBasicVariablePlaceholders(workbook);
+            console.log(`Found ${placeholders.length} basic variable placeholders`);
+            
+            templateAnalysis = {
+              variables: placeholders.map(name => ({ name, occurrences: 1 })),
+              hasExpenseTable: true,
+              hasMileageTable: true,
+              worksheets: []
+            };
           }
         } else {
           throw new Error('Template buffer is empty');
@@ -431,74 +488,74 @@ exports.handler = async (event, context) => {
         variables[`expense.${index+1}.date`] = ed.date;
       });
       
-      // For templates, potentially generate template-specific variables based on analysis
-      if (isUsingTemplate && templateAnalysis && templateAnalysis.variables.length > 0) {
-        // Generate a schema for the template if we haven't already
-        if (!templateSchema) {
-          templateSchema = await generateSchemaFromAnalysis(templateAnalysis);
-          console.log('Generated schema from template analysis');
+      // Prepare fallback values for dynamic content
+      // Trip summary fallback
+      const tripSummaryFallback = tripData 
+        ? `This report covers expenses for trip "${tripData.name}" with a total of ${expenses.length} expenses amounting to ${formatCurrency(totalExpenses)}.`
+        : `This report covers all expenses with a total of ${expenses.length} entries amounting to ${formatCurrency(totalExpenses)}.`;
+      
+      // Category analysis fallback
+      const topCategory = Object.entries(expenseTypeAmount)
+        .sort(([, a], [, b]) => b - a)[0] || ['other', 0];
+      
+      const categoryAnalysisFallback = `The largest expense category is ${topCategory[0]} at ${formatCurrency(topCategory[1])}, representing ${Math.round((topCategory[1] / totalExpenses) * 100)}% of total expenses.`;
+      
+      // Description summary fallback
+      const descriptionSummaryFallback = `Summary of ${expenses.length} expenses including ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}.`;
+      
+      // Add fallback values immediately, so they're available even if AI generation fails
+      variables['llm.report.summary'] = tripSummaryFallback;
+      variables['llm.categories.analysis'] = categoryAnalysisFallback;
+      variables['llm.trip.summary'] = tripSummaryFallback;
+      variables['llm.expenses.summary'] = tripSummaryFallback;
+      variables['llm.description.summary'] = descriptionSummaryFallback;
+    
+      // If we have template schema with dynamic content fields, try to generate better content
+      let needsDynamicContent = false;
+      let dynamicFields = [];
+      
+      if (isUsingTemplate && templateSchema && templateSchema.dynamicContent && templateSchema.dynamicContent.length > 0) {
+        dynamicFields = templateSchema.dynamicContent;
+        needsDynamicContent = true;
+      } else if (templateAnalysis && templateAnalysis.variables) {
+        // Check if the template uses any of our special llm. variables
+        const llmVars = templateAnalysis.variables
+          .filter(v => v.name.startsWith('llm.'))
+          .map(v => v.name);
+          
+        if (llmVars.length > 0) {
+          dynamicFields = llmVars;
+          needsDynamicContent = true;
+        } else {
+          // Default set of dynamic fields for standard reports
+          dynamicFields = [
+            'llm.report.summary',
+            'llm.categories.analysis', 
+            'llm.description.summary'
+          ];
+          
+          // Only try to generate if we have enough data to make it worthwhile
+          needsDynamicContent = expenses.length >= 3;
         }
-        
-        // Only attempt to generate dynamic content if we have a schema with dynamic content fields
-        if (templateSchema && templateSchema.dynamicContent && templateSchema.dynamicContent.length > 0) {
-          try {
-            // Generate dynamic content based on the template schema
-            const dynamicContent = await generateDynamicContent(
-              templateSchema,
-              expenses,
-              mileageRecords,
-              tripData,
-              variables
-            );
-            
-            // Merge dynamic content into the variables
-            Object.assign(variables, dynamicContent);
-            console.log('Added AI-generated dynamic content to template variables');
-          } catch (error) {
+      }
+      
+      // Try to generate dynamic content without blocking the report generation
+      if (needsDynamicContent) {
+        // No need to await this - we already have fallbacks
+        generateDynamicContent({
+          dynamicContent: dynamicFields
+        }, expenses, mileageRecords, tripData, variables)
+          .then(dynamicContent => {
+            // If we got content, merge it
+            if (dynamicContent && Object.keys(dynamicContent).length > 0) {
+              Object.assign(variables, dynamicContent);
+              console.log('Added AI-generated dynamic content to template variables');
+            }
+          })
+          .catch(error => {
             console.error('Error generating dynamic content:', error);
-            // Continue with the variables we have - will use fallbacks
-          }
-        }
-      } else {
-        // Add any dynamic content via LLM integration for variables with llm. prefix
-        // This will be processed via OpenRouter API with Qwen 3 model
-        try {
-          // Use OpenRouter API to generate report summaries
-          const dynamicContent = await generateDynamicContent({
-            dynamicContent: [
-              'llm.report.summary',
-              'llm.categories.analysis',
-              'llm.description.summary'
-            ]
-          }, expenses, mileageRecords, tripData, variables);
-          
-          // Merge dynamic content into variables
-          Object.assign(variables, dynamicContent);
-        } catch (error) {
-          console.error('Error generating LLM content:', error);
-          
-          // Provide fallback values
-          // Trip summary fallback
-          const tripSummaryFallback = tripData 
-            ? `This report covers expenses for trip "${tripData.name}" with a total of ${expenses.length} expenses amounting to ${formatCurrency(totalExpenses)}.`
-            : `This report covers all expenses with a total of ${expenses.length} entries amounting to ${formatCurrency(totalExpenses)}.`;
-          
-          // Category analysis fallback
-          const topCategory = Object.entries(expenseTypeAmount)
-            .sort(([, a], [, b]) => b - a)[0] || ['other', 0];
-          
-          const categoryAnalysisFallback = `The largest expense category is ${topCategory[0]} at ${formatCurrency(topCategory[1])}, representing ${Math.round((topCategory[1] / totalExpenses) * 100)}% of total expenses.`;
-          
-          // Set fallback values
-          variables['llm.report.summary'] = tripSummaryFallback;
-          variables['llm.categories.analysis'] = categoryAnalysisFallback;
-          variables['llm.trip.summary'] = tripSummaryFallback;
-          variables['llm.expenses.summary'] = tripSummaryFallback;
-          
-          // Description summary fallback
-          const descriptionSummaryFallback = `Summary of ${expenses.length} expenses including ${expenseDescriptions.slice(0, 3).map(ed => ed.description).join(', ')}${expenseDescriptions.length > 3 ? '...' : ''}.`;
-          variables['llm.description.summary'] = descriptionSummaryFallback;
-        }
+            // We already have fallbacks, so no need to do anything here
+          });
       }
       
       console.log('Generated template variables:', Object.keys(variables).length);
@@ -957,6 +1014,41 @@ exports.handler = async (event, context) => {
     };
   }
 };
+
+/**
+ * Basic function to find variable placeholders in a workbook
+ * Simpler and faster than full analysis, but less detailed
+ * @param {ExcelJS.Workbook} workbook The workbook to scan
+ * @returns {string[]} List of variable placeholder names
+ */
+function findBasicVariablePlaceholders(workbook) {
+  const variables = new Set();
+  const variableRegex = /\{\{([^}]+)\}\}/g;
+  
+  // Process each worksheet
+  workbook.worksheets.forEach(worksheet => {
+    // Scan each row and cell for variables
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        // Look for variables in cell content
+        if (cell.value && typeof cell.value === 'string') {
+          let match;
+          
+          // Reset regex
+          variableRegex.lastIndex = 0;
+          
+          // Find all variables in this cell
+          while ((match = variableRegex.exec(cell.value)) !== null) {
+            const varName = match[1].trim();
+            variables.add(varName);
+          }
+        }
+      });
+    });
+  });
+  
+  return Array.from(variables);
+}
 
 /**
  * Analyzes an Excel workbook to extract variables and structure
