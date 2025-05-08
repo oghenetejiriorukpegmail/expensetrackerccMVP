@@ -1219,6 +1219,11 @@ exports.handler = async (event, context) => {
       const processedMultipleTest = processVariables(multipleTest, templateVariables);
       console.log(`Test with multiple variables: "${multipleTest}" -> "${processedMultipleTest}"`);
       
+      // Special test for text with slight variations but containing the variable
+      const customTextTest = "Today is {{date.formatted}} - Report by {{user.full_name}}";
+      const processedCustomTest = processVariables(customTextTest, templateVariables);
+      console.log(`Test with custom text: "${customTextTest}" -> "${processedCustomTest}"`);
+      
       // Special test for variables without braces
       const withoutBracesTest = "Date formatted: date.formatted";
       // Create a synthetic cell-like object to test the full worksheet processing logic
