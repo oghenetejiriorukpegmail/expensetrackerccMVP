@@ -227,9 +227,30 @@ Just provide the description text without any formatting or prefix.`;
     console.error('Error generating receipt description:', error);
     
     // Generate fallback description instead of failing
+    // Check for specific quota exhaustion errors
+    const isQuotaError = error.message?.includes('quota') || 
+                          error.message?.includes('rate limit') || 
+                          error.message?.includes('429') ||
+                          error.status === 429;
+    
+    // Generate appropriate fallback with user-friendly message
     const fallbackDescription = generateFallbackDescription(extractedReceipt);
-    console.log('Using fallback description due to error:', fallbackDescription);
-    return fallbackDescription;
+    
+    if (isQuotaError) {
+      console.log('OpenRouter quota exhausted, informing user to try again tomorrow');
+      
+      // Add the quota message to the receipt data to display to the user
+      if (extractedReceipt) {
+        extractedReceipt._userMessage = "The free AI quota has been exhausted. Please try again tomorrow or enter a description manually.";
+      }
+      
+      // Return the fallback with additional context
+      return `${fallbackDescription} (AI quota exhausted - try again tomorrow)`;
+    } else {
+      // Regular fallback for other types of errors
+      console.log('Using fallback description due to error:', fallbackDescription);
+      return fallbackDescription;
+    }
   }
 }
 

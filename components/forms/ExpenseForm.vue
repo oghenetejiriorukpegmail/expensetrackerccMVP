@@ -281,6 +281,12 @@
             <h3 class="text-sm font-medium text-green-800 dark:text-green-300">
               Data extracted from receipt
             </h3>
+            
+            <!-- Show API quota message if present -->
+            <div v-if="extractedData._userMessage" class="mt-2 text-sm text-yellow-700 dark:text-yellow-200 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded-md border border-yellow-100 dark:border-yellow-800">
+              {{ extractedData._userMessage }}
+            </div>
+            
             <div class="mt-2 text-sm text-green-700 dark:text-green-200">
               <p class="text-xs flex items-center">
                 <component :is="InfoIcon" />
