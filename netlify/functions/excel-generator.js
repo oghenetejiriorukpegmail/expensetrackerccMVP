@@ -884,12 +884,32 @@ exports.handler = async (event, context) => {
         }
       }
       
-      // Format amounts as currency
-      expensesSheet.getColumn('amount').numFmt = '$#,##0.00';
+      // Format amounts as currency - safely with error checking
+      try {
+        // Check if column exists before trying to format it
+        if (expensesSheet.getColumnKey('amount')) {
+          expensesSheet.getColumn('amount').numFmt = '$#,##0.00';
+        } else {
+          // Try to find amount column by position (5th column typically)
+          try {
+            expensesSheet.getColumn(5).numFmt = '$#,##0.00';
+          } catch (formatError) {
+            console.warn('Could not format amount column:', formatError.message);
+          }
+        }
+      } catch (columnError) {
+        console.warn('Could not access column by key:', columnError.message);
+      }
       
-      // Style expenses header row
-      const expensesHeaderRow = expensesSheet.getRow(1);
-      expensesHeaderRow.font = { bold: true };
+      // Style expenses header row - safely with error checking
+      try {
+        const expensesHeaderRow = expensesSheet.getRow(1);
+        if (expensesHeaderRow) {
+          expensesHeaderRow.font = { bold: true };
+        }
+      } catch (rowError) {
+        console.warn('Could not style header row:', rowError.message);
+      }
     }
     
     // Fill mileage sheet if needed
@@ -956,12 +976,32 @@ exports.handler = async (event, context) => {
         }
       }
       
-      // Format mileage cost as currency
-      mileageSheet.getColumn('cost').numFmt = '$#,##0.00';
+      // Format mileage cost as currency - safely with error checking
+      try {
+        // Check if column exists before trying to format it
+        if (mileageSheet.getColumnKey('cost')) {
+          mileageSheet.getColumn('cost').numFmt = '$#,##0.00';
+        } else {
+          // Try to find cost column by position (6th column typically)
+          try {
+            mileageSheet.getColumn(6).numFmt = '$#,##0.00';
+          } catch (formatError) {
+            console.warn('Could not format cost column:', formatError.message);
+          }
+        }
+      } catch (columnError) {
+        console.warn('Could not access column by key:', columnError.message);
+      }
       
-      // Style mileage header row
-      const mileageHeaderRow = mileageSheet.getRow(1);
-      mileageHeaderRow.font = { bold: true };
+      // Style mileage header row - safely with error checking
+      try {
+        const mileageHeaderRow = mileageSheet.getRow(1);
+        if (mileageHeaderRow) {
+          mileageHeaderRow.font = { bold: true };
+        }
+      } catch (rowError) {
+        console.warn('Could not style header row:', rowError.message);
+      }
     }
     
     // For templates, do a final pass to replace any variables that might have been missed
@@ -978,8 +1018,13 @@ exports.handler = async (event, context) => {
     // Generate Excel buffer
     console.log('Generating Excel buffer...');
     try {
-      // Check if sheets have data
-      console.log(`Sheets summary: Summary (${summarySheet.rowCount} rows), Expenses (${expensesSheet.rowCount} rows), Mileage (${mileageSheet.rowCount} rows)`);
+      // Safely get row counts with error handling
+      let summaryRows = 0, expensesRows = 0, mileageRows = 0;
+      try { summaryRows = summarySheet.rowCount; } catch (e) { console.warn('Could not get summary row count', e.message); }
+      try { expensesRows = expensesSheet.rowCount; } catch (e) { console.warn('Could not get expenses row count', e.message); }
+      try { mileageRows = mileageSheet.rowCount; } catch (e) { console.warn('Could not get mileage row count', e.message); }
+      
+      console.log(`Sheets summary: Summary (${summaryRows} rows), Expenses (${expensesRows} rows), Mileage (${mileageRows} rows)`);
       
       // Generate buffer
       const buffer = await workbook.xlsx.writeBuffer();
@@ -1004,6 +1049,19 @@ exports.handler = async (event, context) => {
       };
     } catch (err) {
       console.error('Error generating Excel buffer:', err);
+      
+      // For debugging, check worksheet structure
+      try {
+        console.log('Workbook structure:', workbook.worksheets.map(ws => ({ 
+          name: ws.name, 
+          columnCount: ws.columnCount,
+          rowCount: ws.rowCount,
+          definedNames: workbook.definedNames.getNames(ws.name)
+        })));
+      } catch (debugErr) {
+        console.error('Error inspecting workbook:', debugErr);
+      }
+      
       throw new Error(`Failed to generate Excel file: ${err.message}`);
     }
   } catch (error) {
