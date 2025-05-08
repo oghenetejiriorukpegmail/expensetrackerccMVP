@@ -115,8 +115,14 @@ REQUIREMENTS:
         role: 'user',
         content: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt
       }],
-      temperature: 0.3,
-      max_tokens: 100
+      temperature: 0.2,
+      max_tokens: 150,
+      top_p: 0.7,
+      response_format: { "type": "text" },
+      extra_body: {
+        reasoning: false,
+        enable_thinking: false
+      }
     };
     console.log('OpenRouter request payload:', JSON.stringify(requestPayload));
     
@@ -144,7 +150,7 @@ REQUIREMENTS:
               content: prompt
             }],
             temperature: 0.2,     // Lower temperature for more deterministic output
-            max_tokens: 50,       // Shorter response - we only need 1-2 sentences
+            max_tokens: 150,      // INCREASED TO ALLOW MORE OUTPUT SPACE
             top_p: 0.7,           // More focused sampling
             response_format: { "type": "text" }, // Force plain text output
             stop: ["\n\n"],       // Stop after a reasonable paragraph
