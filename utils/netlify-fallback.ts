@@ -99,8 +99,13 @@ export async function processReceiptWithNetlifyFallback(
       throw new Error('No receipt data in response');
     }
     
-    // Log the description directly from the response
-    console.log('Description from server response:', data.description);
+    // Check if we need to request a description asynchronously
+    const needsAsyncDescription = data.needsAsyncDescription || false;
+    const asyncDescriptionEndpoint = data.asyncDescriptionEndpoint || '/.netlify/functions/generate-receipt-description';
+    
+    // Log initial description information
+    console.log('Initial description from server response:', data.initialDescription);
+    console.log('Needs async description:', needsAsyncDescription);
     
     // Create a standardized receipt object
     const extractedData: ExtractedReceipt = {
@@ -118,8 +123,11 @@ export async function processReceiptWithNetlifyFallback(
       _fallback: receipt._fallback || true,
       _fallbackReason: receipt._fallbackReason || 'Used Netlify function fallback',
       _technicalDetails: receipt._technicalDetails || undefined,
-      // Check multiple possible sources for the description
-      description: receipt.description || data.description || null 
+      // Use initial description for now, potentially to be updated asynchronously
+      description: receipt._initialDescription || data.initialDescription || null,
+      // Add metadata for async description
+      _needsAsyncDescription: needsAsyncDescription,
+      _asyncDescriptionEndpoint: needsAsyncDescription ? asyncDescriptionEndpoint : null
     };
     
     // If this is a fallback response, log detailed technical information
@@ -155,9 +163,94 @@ export async function processReceiptWithNetlifyFallback(
     }, null, 2));
     
     console.log('Successfully processed receipt with Netlify function fallback');
+    
+    // If we need to fetch a description asynchronously, start that process
+    // but don't wait for it - let the UI display what we have so far
+    if (extractedData._needsAsyncDescription && extractedData._asyncDescriptionEndpoint) {
+      requestAsyncDescription(extractedData)
+        .then(description => {
+          console.log('Async description generated:', description);
+          // This will be handled by the caller
+          extractedData.description = description;
+          extractedData._descriptionGenerationComplete = true;
+          
+          // Dispatch an event so the UI can update
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('receipt-description-updated', { 
+              detail: { receiptId: extractedData.id, description }
+            }));
+          }
+        })
+        .catch(descError => {
+          console.error('Failed to generate async description:', descError);
+          // Keep using the initial description
+        });
+    }
+    
     return extractedData;
   } catch (error) {
     console.error('Error processing receipt with Netlify fallback:', error);
+    throw error;
+  }
+}
+
+/**
+ * Request an asynchronous description for a receipt
+ * @param receipt The receipt data to generate a description for
+ * @returns Promise that resolves to the generated description
+ */
+export async function requestAsyncDescription(receipt: ExtractedReceipt): Promise<string> {
+  if (!receipt._asyncDescriptionEndpoint) {
+    throw new Error('No async description endpoint specified in receipt');
+  }
+  
+  console.log('Requesting async description for receipt...');
+  
+  try {
+    // Send request to the async description endpoint
+    const response = await fetch(receipt._asyncDescriptionEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        receipt: {
+          vendor: receipt.vendor,
+          amount: receipt.amount,
+          date: receipt.date,
+          currency: receipt.currency,
+          location: receipt.location,
+          expenseType: receipt.expenseType,
+          items: receipt.items,
+          total: receipt.total,
+          taxAmount: receipt.taxAmount,
+          id: receipt.id
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Description generation failed: ${response.status} ${response.statusText}`;
+      
+      try {
+        const errorJson = await response.json();
+        errorMessage = errorJson.error || errorMessage;
+      } catch (e) {
+        // Use default error message
+      }
+      
+      throw new Error(errorMessage);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.description) {
+      throw new Error('No description returned from endpoint');
+    }
+    
+    return data.description;
+  } catch (error) {
+    console.error('Error requesting async description:', error);
     throw error;
   }
 }

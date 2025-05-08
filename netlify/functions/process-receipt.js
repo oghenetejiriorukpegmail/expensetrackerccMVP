@@ -699,27 +699,27 @@ exports.handler = async (event, context) => {
       // Process the entities to extract receipt data
       const processedReceipt = processDocumentAIEntities(document, entities);
       
-      // Generate a description directly using fallback method (OpenRouter API temporarily disabled)
-      let description = null;
+      // Set a flag to indicate that description should be generated asynchronously
+      // This separates the slow description generation from the main receipt processing
+      let needsDescription = true;
+      
+      // Generate a simple fallback description for immediate display 
+      // But the client will request a better one asynchronously
+      let fallbackDescription = null;
       try {
-        console.log('OpenRouter API temporarily disabled - using fallback description');
-        // Use the fallback description generation instead of OpenRouter
-        description = generateFallbackDescription(processedReceipt);
-        console.log('Generated fallback description:', description);
+        console.log('Using simplified fallback description - full description will be requested separately');
+        fallbackDescription = generateFallbackDescription(processedReceipt);
+        console.log('Generated initial fallback description:', fallbackDescription);
         
-        // Add a note that LLM descriptions are temporarily disabled
-        description += " (AI descriptions temporarily disabled)";
+        // Set the temporary description but mark it for replacement
+        processedReceipt._initialDescription = fallbackDescription;
+        processedReceipt._needsAsyncDescription = true;
       } catch (descError) {
-        console.error('Error generating fallback description:', descError);
+        console.error('Error generating initial fallback description:', descError);
         // Don't fail the whole request if description generation fails
       }
       
-      // If we have a description, add it directly to the processed receipt object as well
-      if (description) {
-        processedReceipt.description = description;
-      }
-      
-      // Return the processed receipt with description
+      // Return the processed receipt with instructions for async description
       return {
         statusCode: 200,
         headers: {
@@ -730,9 +730,10 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           receipt: processedReceipt,
           message: 'Receipt processed successfully with Document AI',
-          description: description,
-          // Include flag for backward compatibility
-          generateDescription: description === null
+          initialDescription: fallbackDescription,
+          // Include flags for the new async description flow
+          needsAsyncDescription: true,
+          asyncDescriptionEndpoint: '/.netlify/functions/generate-receipt-description'
         })
       };
     } catch (authError) {

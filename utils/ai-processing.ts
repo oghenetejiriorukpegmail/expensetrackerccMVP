@@ -23,6 +23,7 @@ import { processReceiptWithDocumentAI } from './document-ai';
  * Types for AI processing
  */
 export interface ExtractedReceipt {
+  id?: string;          // Optional ID for receipt tracking
   vendor?: string;
   amount?: number;
   currency?: string;
@@ -38,6 +39,7 @@ export interface ExtractedReceipt {
     country?: string;
   } | string; // Allow location to be a string or an object
   expenseType?: string;
+  expense_type?: string; // Duplicate for form compatibility 
   taxAmount?: number;
   total?: number;
   description?: string; // AI-generated description of the expense
@@ -57,6 +59,10 @@ export interface ExtractedReceipt {
     attempts?: number;
     [key: string]: any; // Allow any additional technical details
   };
+  // Async description metadata
+  _needsAsyncDescription?: boolean;
+  _asyncDescriptionEndpoint?: string;
+  _descriptionGenerationComplete?: boolean;
 }
 
 export interface ExtractedOdometerReading {
