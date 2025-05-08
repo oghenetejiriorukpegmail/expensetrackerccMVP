@@ -209,6 +209,15 @@
             Accepted formats: .xlsx, .xls
           </p>
           
+          <div class="mt-1 flex space-x-4">
+            <a href="/template-variables-guide.md" target="_blank" class="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+              View Template Variables Guide
+            </a>
+            <a href="/templates/sample-template.xlsx" download class="text-xs text-primary-600 dark:text-primary-400 hover:underline">
+              Download Sample Template
+            </a>
+          </div>
+          
           <div class="mt-4">
             <label class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
               <span>Select Template</span>
