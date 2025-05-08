@@ -9,6 +9,13 @@ This guide explains how to create custom Excel templates for your expense report
 3. Upload the template in the Settings page
 4. When generating reports, select "Use custom Excel template"
 
+## Important Notes
+
+- Variable names are case-sensitive. Use exactly as shown below (e.g., `{{user.full_name}}`, not `{{User.Full_Name}}`)
+- Make sure you include the double braces around the variable name (e.g., `{{date}}`, not just `date`)
+- When the system processes your template, it will replace all variables with actual data
+- For any variables that aren't found, the system will leave the original placeholder unchanged
+
 ## Available Variables
 
 ### User Information

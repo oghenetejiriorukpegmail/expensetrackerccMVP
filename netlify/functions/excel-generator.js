@@ -164,12 +164,29 @@ exports.handler = async (event, context) => {
       // Check if there are variables to process (using mustache-like syntax {{variable}})
       if (!text.includes('{{')) return text;
       
+      // Log the variable substitution process for debugging
+      console.log(`Processing variables in text: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`);
+      
       // Replace variables with their values
-      return text.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
+      const result = text.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
         const trimmedVar = variable.trim();
-        // Return the variable value or keep the original syntax if variable not found
-        return variables[trimmedVar] !== undefined ? variables[trimmedVar] : match;
+        
+        // Check if variable exists in our variables object
+        if (variables[trimmedVar] !== undefined) {
+          console.log(`  Replacing {{${trimmedVar}}} with "${variables[trimmedVar]}"`);
+          return variables[trimmedVar];
+        } else {
+          console.log(`  Variable {{${trimmedVar}}} not found, keeping as is`);
+          return match;
+        }
       });
+      
+      // If we replaced something, log the result
+      if (result !== text) {
+        console.log(`  Result: "${result.substring(0, 30)}${result.length > 30 ? '...' : ''}"`);
+      }
+      
+      return result;
     };
     
     // Process an entire worksheet, looking for variables to substitute
@@ -424,6 +441,69 @@ exports.handler = async (event, context) => {
         };
       });
       
+      // Fetch user profile for user variables
+      let userProfile = null;
+      try {
+        // For server-side function using SUPABASE_SERVICE_KEY, we need to get user ID from request
+        let userId = null;
+
+        // First try to get user ID from the request
+        if (tripId) {
+          // Get the trip's user ID
+          const { data: tripUserData } = await supabase
+            .from('trips')
+            .select('user_id')
+            .eq('id', tripId)
+            .single();
+            
+          if (tripUserData?.user_id) {
+            userId = tripUserData.user_id;
+            console.log('Using user ID from trip:', userId);
+          }
+        } else if (expenses.length > 0) {
+          // Get user ID from the first expense
+          userId = expenses[0].user_id;
+          console.log('Using user ID from first expense:', userId);
+        }
+        
+        // If we found a user ID, fetch the profile directly
+        if (userId) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+            
+          if (profileError) {
+            console.warn('Error fetching profile:', profileError.message);
+          } else if (profileData) {
+            userProfile = profileData;
+            console.log('Found user profile for variable substitution');
+          }
+        } else {
+          // Fallback to auth.getUser() if we couldn't get user ID from data
+          console.log('No user ID found in data, trying auth.getUser()');
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user?.id) {
+            // Fetch the profile
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userData.user.id)
+              .single();
+              
+            if (profileData) {
+              userProfile = profileData;
+              console.log('Found user profile from auth.getUser()');
+            }
+          }
+        }
+      } catch (profileError) {
+        console.warn('Could not fetch user profile for variables:', profileError.message);
+      }
+      
+      console.log('User profile data:', userProfile ? JSON.stringify(userProfile) : 'Not found');
+      
       // Build base variables object
       const variables = {
         // Date information
@@ -477,6 +557,10 @@ exports.handler = async (event, context) => {
         
         // Description variables
         'expenses.descriptions': expenseDescriptions.map(ed => ed.description).join('; '),
+        
+        // User information variables - with fallbacks if profile not found
+        'user.full_name': userProfile?.full_name || 'User',
+        'user.email': userProfile?.email || userProfile?.id || 'user@example.com',
       };
       
       // Add individual expense descriptions with index
@@ -1006,8 +1090,17 @@ exports.handler = async (event, context) => {
     
     // For templates, do a final pass to replace any variables that might have been missed
     if (isUsingTemplate) {
+      console.log('Doing final pass of variable substitution');
+      
       // Build variables again to ensure all are available
       const templateVariables = await buildTemplateVariables();
+      
+      // Log some important variables to help debug
+      console.log('Final template variables check:');
+      console.log('- user.full_name:', templateVariables['user.full_name']);
+      console.log('- user.email:', templateVariables['user.email']);
+      console.log('- trip.name:', templateVariables['trip.name']);
+      console.log('- report.title:', templateVariables['report.title']);
       
       // Process all worksheets for variable substitution
       workbook.worksheets.forEach(sheet => {
