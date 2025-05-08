@@ -222,47 +222,92 @@ exports.handler = async (event, context) => {
       // Count of variables found and replaced
       let varCount = 0;
       let replacedCount = 0;
+      let cellsWithVarsCount = 0;
+      
+      // Also handle direct replacement of cell values that exactly match a variable name (without braces)
+      // This is for scenarios where someone might have typed just "date.formatted" instead of "{{date.formatted}}"
+      const directReplacementVariables = {};
+      Object.keys(variables).forEach(key => {
+        // Only add it if it's not already in braces
+        directReplacementVariables[key] = variables[key];
+        
+        // Also add a version without dots
+        if (key.includes('.')) {
+          const simplifiedKey = key.replace(/\./g, '_');
+          directReplacementVariables[simplifiedKey] = variables[key];
+        }
+      });
       
       // Iterate through all cells in the worksheet
       worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
           if (cell.type === ExcelJS.ValueType.String && cell.text) {
             const originalValue = cell.text;
+            let processed = false;
+            let processedValue = originalValue;
             
-            // Check if the cell contains any variables
+            // Case 1: Check if the cell contains any variables with braces {{var}}
             if (originalValue.includes('{{')) {
+              cellsWithVarsCount++;
+              varCount += (originalValue.match(/\{\{([^}]+)\}\}/g) || []).length;
+              processedValue = processVariables(originalValue, variables);
+              processed = true;
+            } 
+            // Case 2: Check if the cell text exactly matches a variable name without braces
+            else if (directReplacementVariables[originalValue.trim()]) {
+              processedValue = directReplacementVariables[originalValue.trim()].toString();
               varCount++;
-              const processedValue = processVariables(originalValue, variables);
+              processed = true;
+              console.log(`Direct variable match in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
+            }
+            // Case 3: Check for variable names without braces but embedded in text
+            else {
+              // Try to match against known variable names without braces
+              let hasDirectReplacement = false;
+              Object.keys(directReplacementVariables).forEach(varName => {
+                // Only try to replace full words, not partial matches
+                const varPattern = new RegExp(`\\b${escapeRegExp(varName)}\\b`, 'g');
+                if (varPattern.test(originalValue)) {
+                  hasDirectReplacement = true;
+                  processedValue = originalValue.replace(
+                    varPattern, 
+                    directReplacementVariables[varName].toString()
+                  );
+                  varCount++;
+                  processed = true;
+                  console.log(`Embedded variable without braces in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
+                }
+              });
+            }
+            
+            // Only update if something changed
+            if (processed && originalValue !== processedValue) {
+              replacedCount++;
+              console.log(`Replacing variable in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
               
-              // Only update if something changed
-              if (originalValue !== processedValue) {
-                replacedCount++;
-                console.log(`Replacing variable in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
-                
-                // Preserve the cell's style and format by creating a Rich Text value
-                // This prevents issues with shared cell formats
-                try {
-                  // For complex cells, we need to handle rich text carefully
-                  if (cell.value && typeof cell.value === 'object' && cell.value.richText) {
-                    // Create a new rich text object with our processed value
-                    const newRichText = [{ text: processedValue }];
-                    cell.value = { richText: newRichText };
-                  } else {
-                    // For simple string cells
-                    cell.value = processedValue;
-                  }
-                } catch (formatError) {
-                  // Fall back to simple string replacement if rich text handling fails
-                  console.warn(`Could not preserve formatting in ${worksheet.name} [${rowNumber},${colNumber}]:`, formatError.message);
+              // Preserve the cell's style and format by creating a Rich Text value
+              // This prevents issues with shared cell formats
+              try {
+                // For complex cells, we need to handle rich text carefully
+                if (cell.value && typeof cell.value === 'object' && cell.value.richText) {
+                  // Create a new rich text object with our processed value
+                  const newRichText = [{ text: processedValue }];
+                  cell.value = { richText: newRichText };
+                } else {
+                  // For simple string cells
                   cell.value = processedValue;
                 }
+              } catch (formatError) {
+                // Fall back to simple string replacement if rich text handling fails
+                console.warn(`Could not preserve formatting in ${worksheet.name} [${rowNumber},${colNumber}]:`, formatError.message);
+                cell.value = processedValue;
               }
             }
           }
         });
       });
       
-      console.log(`${worksheet.name}: Found ${varCount} cells with variables, replaced ${replacedCount}`);
+      console.log(`${worksheet.name}: Found ${cellsWithVarsCount} cells with variables (${varCount} total variables), replaced ${replacedCount}`);
       
       // Check for any unreplaced variables
       if (varCount > replacedCount) {
@@ -1173,6 +1218,25 @@ exports.handler = async (event, context) => {
       const multipleTest = "Date: {{date.formatted}} | User: {{user.full_name}}";
       const processedMultipleTest = processVariables(multipleTest, templateVariables);
       console.log(`Test with multiple variables: "${multipleTest}" -> "${processedMultipleTest}"`);
+      
+      // Special test for variables without braces
+      const withoutBracesTest = "Date formatted: date.formatted";
+      // Create a synthetic cell-like object to test the full worksheet processing logic
+      const testCell = { 
+        type: ExcelJS.ValueType.String, 
+        text: withoutBracesTest,
+        value: withoutBracesTest
+      };
+      const testRow = {
+        eachCell: (opts, callback) => callback(testCell, 1)
+      };
+      const testWorksheet = {
+        name: "TEST_SHEET",
+        eachRow: (opts, callback) => callback(testRow, 1)
+      };
+      
+      console.log("Testing variable replacement without braces:");
+      processWorksheet(testWorksheet, templateVariables);
       
       // Process all worksheets for variable substitution - do THREE passes to ensure all nested variables are replaced
       console.log('Performing multiple passes to ensure all variables are replaced');
