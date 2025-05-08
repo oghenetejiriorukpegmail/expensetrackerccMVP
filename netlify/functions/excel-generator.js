@@ -167,26 +167,52 @@ exports.handler = async (event, context) => {
       // Log the variable substitution process for debugging
       console.log(`Processing variables in text: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`);
       
-      // Replace variables with their values
-      const result = text.replace(/\{\{([^}]+)\}\}/g, (match, variable) => {
-        const trimmedVar = variable.trim();
+      // Replace variables with their values - handle complex cases where variables might be embedded in text
+      let result = text;
+      let variablesReplaced = false;
+      let matchCount = 0;
+      
+      // Extract all variable patterns from the text
+      const variableMatches = text.match(/\{\{([^}]+)\}\}/g) || [];
+      matchCount = variableMatches.length;
+      
+      if (matchCount > 0) {
+        console.log(`  Found ${matchCount} variable pattern(s) in text`);
         
-        // Check if variable exists in our variables object
-        if (variables[trimmedVar] !== undefined) {
-          console.log(`  Replacing {{${trimmedVar}}} with "${variables[trimmedVar]}"`);
-          return variables[trimmedVar];
-        } else {
-          console.log(`  Variable {{${trimmedVar}}} not found, keeping as is`);
-          return match;
-        }
-      });
+        // Process each variable match
+        variableMatches.forEach(match => {
+          // Extract variable name without braces
+          const varName = match.substring(2, match.length - 2).trim();
+          
+          // Check if variable exists in our variables object
+          if (variables[varName] !== undefined) {
+            // Do a global replace for this specific variable
+            const regex = new RegExp(escapeRegExp(match), 'g');
+            
+            // If the variable is embedded in a larger string (like ____{{date.formatted}}____)
+            // we need to handle it carefully to preserve the surrounding text
+            const replacement = variables[varName].toString();
+            result = result.replace(regex, replacement);
+            
+            console.log(`  Replacing {{${varName}}} with "${replacement}"`);
+            variablesReplaced = true;
+          } else {
+            console.log(`  Variable {{${varName}}} not found, keeping as is`);
+          }
+        });
+      }
       
       // If we replaced something, log the result
-      if (result !== text) {
+      if (variablesReplaced) {
         console.log(`  Result: "${result.substring(0, 30)}${result.length > 30 ? '...' : ''}"`);
       }
       
       return result;
+    };
+    
+    // Helper function to escape special regex characters in a string
+    const escapeRegExp = (string) => {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
     };
     
     // Process an entire worksheet, looking for variables to substitute
@@ -1136,6 +1162,17 @@ exports.handler = async (event, context) => {
       console.log('- date.formatted:', templateVariables['date.formatted']);
       console.log('- trip.name:', templateVariables['trip.name']);
       console.log('- report.title:', templateVariables['report.title']);
+      
+      // Special test for embedded variables like ____{{date.formatted}}____
+      console.log('Testing embedded variable substitution');
+      const embeddedTest = "____{{date.formatted}}____";
+      const processedTest = processVariables(embeddedTest, templateVariables);
+      console.log(`Test with embedded variables: "${embeddedTest}" -> "${processedTest}"`);
+      
+      // Special test for multiple variables in the same cell
+      const multipleTest = "Date: {{date.formatted}} | User: {{user.full_name}}";
+      const processedMultipleTest = processVariables(multipleTest, templateVariables);
+      console.log(`Test with multiple variables: "${multipleTest}" -> "${processedMultipleTest}"`);
       
       // Process all worksheets for variable substitution - do THREE passes to ensure all nested variables are replaced
       console.log('Performing multiple passes to ensure all variables are replaced');
