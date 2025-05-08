@@ -480,29 +480,15 @@ onMounted(async () => {
     };
   }
   
-  // We don't need to set up an event listener anymore, we'll use store instead
-  console.log('ExpenseForm mounted, will watch expenseStore for description updates');
-});
+  });
 
 // Watch the expenseStore for description updates
 watch(
   () => expenseStore.generatedDescription,
   (newDescription) => {
     if (newDescription) {
-      console.log('ExpenseForm detected description update from store:', newDescription);
-      // Add alert for debugging
-      alert('Form received description from store: ' + newDescription);
-      
       // Update the form with the new description
       form.value.description = newDescription;
-      
-      // Log the form state after updating
-      console.log('Form state after description update:', JSON.stringify({
-        vendor: form.value.vendor,
-        amount: form.value.amount,
-        expense_type: form.value.expense_type,
-        description: form.value.description
-      }));
     }
   }
 );

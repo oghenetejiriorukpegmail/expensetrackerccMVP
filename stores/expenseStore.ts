@@ -545,7 +545,6 @@ export const useExpenseStore = defineStore('expense', {
     setGeneratedDescription(description: string) {
       this.generatedDescription = description;
       this.lastDescriptionTimestamp = new Date();
-      console.log('Store updated with generated description:', description);
     },
     
     // Clear state
