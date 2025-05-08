@@ -193,21 +193,55 @@ exports.handler = async (event, context) => {
     const processWorksheet = (worksheet, variables) => {
       console.log(`Processing variables in worksheet: ${worksheet.name}`);
       
+      // Count of variables found and replaced
+      let varCount = 0;
+      let replacedCount = 0;
+      
       // Iterate through all cells in the worksheet
       worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
           if (cell.type === ExcelJS.ValueType.String && cell.text) {
             const originalValue = cell.text;
-            const processedValue = processVariables(originalValue, variables);
             
-            // Only update if something changed
-            if (originalValue !== processedValue) {
-              console.log(`Replacing variable in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
-              cell.value = processedValue;
+            // Check if the cell contains any variables
+            if (originalValue.includes('{{')) {
+              varCount++;
+              const processedValue = processVariables(originalValue, variables);
+              
+              // Only update if something changed
+              if (originalValue !== processedValue) {
+                replacedCount++;
+                console.log(`Replacing variable in ${worksheet.name} [${rowNumber},${colNumber}]: "${originalValue}" → "${processedValue}"`);
+                
+                // Preserve the cell's style and format by creating a Rich Text value
+                // This prevents issues with shared cell formats
+                try {
+                  // For complex cells, we need to handle rich text carefully
+                  if (cell.value && typeof cell.value === 'object' && cell.value.richText) {
+                    // Create a new rich text object with our processed value
+                    const newRichText = [{ text: processedValue }];
+                    cell.value = { richText: newRichText };
+                  } else {
+                    // For simple string cells
+                    cell.value = processedValue;
+                  }
+                } catch (formatError) {
+                  // Fall back to simple string replacement if rich text handling fails
+                  console.warn(`Could not preserve formatting in ${worksheet.name} [${rowNumber},${colNumber}]:`, formatError.message);
+                  cell.value = processedValue;
+                }
+              }
             }
           }
         });
       });
+      
+      console.log(`${worksheet.name}: Found ${varCount} cells with variables, replaced ${replacedCount}`);
+      
+      // Check for any unreplaced variables
+      if (varCount > replacedCount) {
+        console.log(`WARNING: Some variables in ${worksheet.name} were not replaced. Check the variable names.`);
+      }
     };
     
     // Create a new Excel workbook
@@ -1099,10 +1133,26 @@ exports.handler = async (event, context) => {
       console.log('Final template variables check:');
       console.log('- user.full_name:', templateVariables['user.full_name']);
       console.log('- user.email:', templateVariables['user.email']);
+      console.log('- date.formatted:', templateVariables['date.formatted']);
       console.log('- trip.name:', templateVariables['trip.name']);
       console.log('- report.title:', templateVariables['report.title']);
       
-      // Process all worksheets for variable substitution
+      // Process all worksheets for variable substitution - do THREE passes to ensure all nested variables are replaced
+      console.log('Performing multiple passes to ensure all variables are replaced');
+      
+      // First pass
+      workbook.worksheets.forEach(sheet => {
+          processWorksheet(sheet, templateVariables);
+      });
+      
+      // Second pass - sometimes variables are inside other variables or formatting changes
+      console.log('Second pass of variable substitution');
+      workbook.worksheets.forEach(sheet => {
+          processWorksheet(sheet, templateVariables);
+      });
+      
+      // Final pass - catch any stragglers
+      console.log('Final pass of variable substitution');
       workbook.worksheets.forEach(sheet => {
           processWorksheet(sheet, templateVariables);
       });
