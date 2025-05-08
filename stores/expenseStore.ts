@@ -55,6 +55,10 @@ export const useExpenseStore = defineStore('expense', {
     // AI processing state
     processingReceipt: false,
     aiProcessingError: null as string | null,
+    
+    // Async description state
+    generatedDescription: null as string | null,
+    lastDescriptionTimestamp: null as Date | null,
   }),
   
   getters: {
@@ -537,6 +541,13 @@ export const useExpenseStore = defineStore('expense', {
       }
     },
     
+    // Set generated description for a receipt
+    setGeneratedDescription(description: string) {
+      this.generatedDescription = description;
+      this.lastDescriptionTimestamp = new Date();
+      console.log('Store updated with generated description:', description);
+    },
+    
     // Clear state
     clearState() {
       this.expenses = [];
@@ -544,6 +555,8 @@ export const useExpenseStore = defineStore('expense', {
       this.tripExpenses = [];
       this.error = null;
       this.loading = false;
+      this.generatedDescription = null;
+      this.lastDescriptionTimestamp = null;
     }
   }
 });

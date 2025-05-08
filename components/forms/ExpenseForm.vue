@@ -480,19 +480,38 @@ onMounted(async () => {
     };
   }
   
-  // Add event listener for receipt description updates
-  console.log('Setting up receipt-description-updated event listener');
-  window.addEventListener('receipt-description-updated', handleReceiptDescriptionUpdate);
+  // We don't need to set up an event listener anymore, we'll use store instead
+  console.log('ExpenseForm mounted, will watch expenseStore for description updates');
 });
 
-// Clean up any blob URLs and event listeners when component is unmounted
+// Watch the expenseStore for description updates
+watch(
+  () => expenseStore.generatedDescription,
+  (newDescription) => {
+    if (newDescription) {
+      console.log('ExpenseForm detected description update from store:', newDescription);
+      // Add alert for debugging
+      alert('Form received description from store: ' + newDescription);
+      
+      // Update the form with the new description
+      form.value.description = newDescription;
+      
+      // Log the form state after updating
+      console.log('Form state after description update:', JSON.stringify({
+        vendor: form.value.vendor,
+        amount: form.value.amount,
+        expense_type: form.value.expense_type,
+        description: form.value.description
+      }));
+    }
+  }
+);
+
+// Clean up any blob URLs when component is unmounted
 onUnmounted(() => {
   if (form.value.receipt_url && form.value.receipt_url.startsWith('blob:')) {
     URL.revokeObjectURL(form.value.receipt_url);
   }
-  
-  // Remove event listener when component is unmounted
-  window.removeEventListener('receipt-description-updated', handleReceiptDescriptionUpdate);
 });
 
 // Handle file input change
@@ -582,30 +601,8 @@ function applyExtractedData() {
   extractedData.value = null;
 }
 
-// Handle receipt description update event
-function handleReceiptDescriptionUpdate(event) {
-  // Alert for debugging - this will be visible in the browser
-  alert('Received description: ' + (event.detail?.description || 'none'));
-  console.log('Received receipt description update event:', event.detail);
-  
-  // Check if we have the necessary data
-  if (event.detail && event.detail.description) {
-    // Store the received description
-    const description = event.detail.description;
-    console.log('Setting form description from async update:', description);
-    
-    // Update the description in the form
-    form.value.description = description;
-    
-    // Log the form state after updating
-    console.log('Form state after description update:', JSON.stringify({
-      vendor: form.value.vendor,
-      amount: form.value.amount,
-      expense_type: form.value.expense_type,
-      description: form.value.description
-    }));
-  }
-}
+// We no longer need this event handler since we're using the store
+// The watch() takes care of updating the form when the store changes
 
 // Submit form
 function submitForm() {

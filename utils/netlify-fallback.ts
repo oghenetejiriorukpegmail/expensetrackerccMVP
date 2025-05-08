@@ -187,15 +187,26 @@ export async function processReceiptWithNetlifyFallback(
           extractedData.description = description;
           extractedData._descriptionGenerationComplete = true;
           
-          // Dispatch an event so the UI can update
+          // Update store instead of using events
           if (typeof window !== 'undefined') {
-            // Use both console.log and alert for debugging
-            console.log('Dispatching receipt-description-updated event with description:', description);
+            // Show the alert for debugging
             window.alert('Generated description: ' + description);
+            console.log('Updating store with description:', description);
             
-            window.dispatchEvent(new CustomEvent('receipt-description-updated', { 
-              detail: { description }
-            }));
+            // Import the store directly
+            try {
+              // Using dynamic import for the store to avoid cyclic dependencies
+              import('../stores/expenseStore').then(module => {
+                const { useExpenseStore } = module;
+                const store = useExpenseStore();
+                store.setGeneratedDescription(description);
+                console.log('Successfully updated expenseStore with description');
+              }).catch(err => {
+                console.error('Failed to import and update store:', err);
+              });
+            } catch (storeError) {
+              console.error('Error updating store:', storeError);
+            }
           }
         })
         .catch(descError => {
