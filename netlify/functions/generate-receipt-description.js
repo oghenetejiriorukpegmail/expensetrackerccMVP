@@ -149,7 +149,8 @@ REQUIREMENTS:
             response_format: { "type": "text" }, // Force plain text output
             stop: ["\n\n"],       // Stop after a reasonable paragraph
             extra_body: {
-              reasoning: false    // Explicitly disable reasoning mode
+              reasoning: false,   // Explicitly disable reasoning mode
+              enable_thinking: false // Explicitly disable thinking mode
             }
           })
         });
