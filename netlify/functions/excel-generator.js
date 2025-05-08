@@ -1,6 +1,12 @@
 // Netlify function to generate Excel reports with AI-powered template analysis
 const ExcelJS = require('exceljs');
 const { createClient } = require('@supabase/supabase-js');
+const { 
+  findTableHeaderRow, 
+  mapTableColumns, 
+  getColumnLetter, 
+  getColumnIndex 
+} = require('./table-detection-helpers.cjs');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
@@ -1216,9 +1222,154 @@ exports.handler = async (event, context) => {
       }
     }
     
+    // For templates, analyze existing structure and map columns for expense and mileage data
+    let expenseTableInfo = null;
+    let mileageTableInfo = null;
+    
+    if (isUsingTemplate) {
+      console.log('Analyzing template structure for expense and mileage tables');
+      
+      // Look for sheets and tables with expense data
+      workbook.worksheets.forEach(sheet => {
+        // Skip if we've already found the tables
+        if (expenseTableInfo && mileageTableInfo) return;
+        
+        console.log(`Scanning worksheet "${sheet.name}" for expense and mileage tables`);
+        
+        // Find the first row that looks like an expense header
+        const expenseHeaderRow = findTableHeaderRow(sheet, [
+          'date', 'expense', 'amount', 'cost', 'currency', 'price', 'type', 'vendor', 'description', 'discreption'
+        ]);
+        
+        if (expenseHeaderRow && !expenseTableInfo) {
+          console.log(`Found expense table header at row ${expenseHeaderRow.rowNumber} in sheet "${sheet.name}"`);
+          expenseTableInfo = {
+            sheet,
+            headerRow: expenseHeaderRow.rowNumber,
+            columns: mapTableColumns(sheet, expenseHeaderRow.rowNumber, {
+              date: ['date', 'expense date', 'transaction date'],
+              amount: ['amount', 'cost', 'price', 'total', 'value', 'expense amount'],
+              currency: ['currency', 'currency code'],
+              description: ['description', 'details', 'expense description', 'notes', 'purpose', 'discreption'],
+              vendor: ['vendor', 'merchant', 'payee', 'supplier', 'store'],
+              expenseType: ['type', 'category', 'expense type'],
+              location: ['location', 'place']
+            })
+          };
+          
+          console.log('Expense table column mapping:', expenseTableInfo.columns);
+        }
+        
+        // Find the first row that looks like a mileage header
+        const mileageHeaderRow = findTableHeaderRow(sheet, [
+          'mileage', 'odometer', 'distance', 'miles', 'kilometers', 'km', 'trip'
+        ]);
+        
+        if (mileageHeaderRow && !mileageTableInfo) {
+          console.log(`Found mileage table header at row ${mileageHeaderRow.rowNumber} in sheet "${sheet.name}"`);
+          mileageTableInfo = {
+            sheet,
+            headerRow: mileageHeaderRow.rowNumber,
+            columns: mapTableColumns(sheet, mileageHeaderRow.rowNumber, {
+              date: ['date', 'travel date', 'trip date'],
+              distance: ['distance', 'miles', 'kilometers', 'km', 'total distance'],
+              startOdometer: ['start', 'start odometer', 'beginning', 'odometer start'],
+              endOdometer: ['end', 'end odometer', 'finish', 'odometer end'],
+              purpose: ['purpose', 'reason', 'description', 'details', 'notes']
+            })
+          };
+          
+          console.log('Mileage table column mapping:', mileageTableInfo.columns);
+        }
+      });
+    }
+    
     // Add expenses to the sheet if it's not a template or if we need to populate a table
-    if (!isUsingTemplate || (isUsingTemplate && (!templateAnalysis || templateAnalysis.hasExpenseTable))) {
-      console.log(`Adding ${expenses.length} expenses to the Expenses sheet`);
+    if (isUsingTemplate && expenseTableInfo && expenses.length > 0) {
+      // Use the detected expense table structure in the template
+      console.log(`Filling expense table starting at row ${expenseTableInfo.headerRow + 1} with ${expenses.length} expenses`);
+      
+      // Start filling data right after the header row
+      let currentRow = expenseTableInfo.headerRow + 1;
+      
+      // Add expense data to the sheet using the mapped columns
+      for (let i = 0; i < expenses.length; i++) {
+        const expense = expenses[i];
+        try {
+          // Create a row for this expense
+          let rowData = {};
+          
+          // Map the expense data to the columns we found in the template
+          if (expenseTableInfo.columns.date) {
+            rowData[expenseTableInfo.columns.date] = expense.date || new Date().toISOString().split('T')[0];
+          }
+          
+          if (expenseTableInfo.columns.amount) {
+            rowData[expenseTableInfo.columns.amount] = expense.amount ? parseFloat(expense.amount) : 0;
+          }
+          
+          if (expenseTableInfo.columns.currency) {
+            rowData[expenseTableInfo.columns.currency] = expense.currency || 'USD';
+          }
+          
+          if (expenseTableInfo.columns.description) {
+            rowData[expenseTableInfo.columns.description] = expense.description || '';
+          }
+          
+          if (expenseTableInfo.columns.vendor) {
+            rowData[expenseTableInfo.columns.vendor] = expense.vendor || '';
+          }
+          
+          if (expenseTableInfo.columns.expenseType) {
+            rowData[expenseTableInfo.columns.expenseType] = expense.expense_type || '';
+          }
+          
+          if (expenseTableInfo.columns.location) {
+            rowData[expenseTableInfo.columns.location] = expense.location || '';
+          }
+          
+          // Add the row to the sheet
+          const row = expenseTableInfo.sheet.getRow(currentRow);
+          
+          // Set each cell value
+          Object.entries(rowData).forEach(([colKey, value]) => {
+            try {
+              // Handle columns defined by letter
+              if (isNaN(colKey)) {
+                const colIndex = getColumnIndex(colKey);
+                row.getCell(colIndex).value = value;
+              } else {
+                // Handle columns defined by number
+                row.getCell(parseInt(colKey)).value = value;
+              }
+            } catch (cellError) {
+              console.warn(`Error setting cell value for column ${colKey}:`, cellError.message);
+            }
+          });
+          
+          // Format for amount if it's a number
+          try {
+            if (expenseTableInfo.columns.amount) {
+              const amountCell = isNaN(expenseTableInfo.columns.amount) 
+                ? row.getCell(getColumnIndex(expenseTableInfo.columns.amount))
+                : row.getCell(parseInt(expenseTableInfo.columns.amount));
+                
+              amountCell.numFmt = '$#,##0.00';
+            }
+          } catch (formatError) {
+            console.warn('Error formatting amount cell:', formatError.message);
+          }
+          
+          // Move to the next row
+          currentRow++;
+          console.log(`Added expense ${i+1}/${expenses.length} to template table`);
+        } catch (err) {
+          console.error(`Error adding expense row ${i+1} to template:`, err);
+        }
+      }
+    } else if (!isUsingTemplate || (isUsingTemplate && (!templateAnalysis || templateAnalysis.hasExpenseTable))) {
+      // Use standard approach for non-templates or when no table structure is found
+      console.log(`Adding ${expenses.length} expenses to the Expenses sheet (standard approach)`);
       for (let i = 0; i < expenses.length; i++) {
         const expense = expenses[i];
         try {
@@ -1271,7 +1422,75 @@ exports.handler = async (event, context) => {
     }
     
     // Fill mileage sheet if needed
-    if (!isUsingTemplate || (isUsingTemplate && (!templateAnalysis || templateAnalysis.hasMileageTable))) {
+    if (isUsingTemplate && mileageTableInfo && mileageRecords.length > 0) {
+      // Use the detected mileage table structure in the template
+      console.log(`Filling mileage table starting at row ${mileageTableInfo.headerRow + 1} with ${mileageRecords.length} records`);
+      
+      // Start filling data right after the header row
+      let currentRow = mileageTableInfo.headerRow + 1;
+      
+      // Add mileage data to the sheet using the mapped columns
+      for (let i = 0; i < mileageRecords.length; i++) {
+        const record = mileageRecords[i];
+        try {
+          // Parse values safely, defaulting to 0 if NaN
+          const startOdometer = record.start_odometer ? parseFloat(record.start_odometer) : 0;
+          const endOdometer = record.end_odometer ? parseFloat(record.end_odometer) : 0;
+          const distance = record.distance ? parseFloat(record.distance) : (endOdometer - startOdometer);
+          const cost = distance * mileageRate;
+          
+          // Create a row for this mileage record
+          let rowData = {};
+          
+          // Map the mileage data to the columns we found in the template
+          if (mileageTableInfo.columns.date) {
+            rowData[mileageTableInfo.columns.date] = record.date || new Date().toISOString().split('T')[0];
+          }
+          
+          if (mileageTableInfo.columns.distance) {
+            rowData[mileageTableInfo.columns.distance] = distance;
+          }
+          
+          if (mileageTableInfo.columns.startOdometer) {
+            rowData[mileageTableInfo.columns.startOdometer] = startOdometer;
+          }
+          
+          if (mileageTableInfo.columns.endOdometer) {
+            rowData[mileageTableInfo.columns.endOdometer] = endOdometer;
+          }
+          
+          if (mileageTableInfo.columns.purpose) {
+            rowData[mileageTableInfo.columns.purpose] = record.purpose || '';
+          }
+          
+          // Add the row to the sheet
+          const row = mileageTableInfo.sheet.getRow(currentRow);
+          
+          // Set each cell value
+          Object.entries(rowData).forEach(([colKey, value]) => {
+            try {
+              // Handle columns defined by letter
+              if (isNaN(colKey)) {
+                const colIndex = getColumnIndex(colKey);
+                row.getCell(colIndex).value = value;
+              } else {
+                // Handle columns defined by number
+                row.getCell(parseInt(colKey)).value = value;
+              }
+            } catch (cellError) {
+              console.warn(`Error setting cell value for column ${colKey}:`, cellError.message);
+            }
+          });
+          
+          // Move to the next row
+          currentRow++;
+          console.log(`Added mileage record ${i+1}/${mileageRecords.length} to template table`);
+        } catch (err) {
+          console.error(`Error adding mileage row ${i+1} to template:`, err);
+        }
+      }
+    } else if (!isUsingTemplate || (isUsingTemplate && (!templateAnalysis || templateAnalysis.hasMileageTable))) {
+      // Use standard approach for non-templates or when no table structure is found
       console.log('Setting up Mileage sheet columns');
       mileageSheet.columns = [
         { header: 'Date', key: 'date', width: 15 },
