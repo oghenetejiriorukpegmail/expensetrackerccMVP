@@ -320,6 +320,7 @@ interface ExtractedReceiptData {
   date?: string;
   location?: string;
   expense_type?: ExpenseType;
+  description?: string; // Added description field
   confidence?: number;
 }
 
@@ -338,7 +339,8 @@ const processReceipt = async (file: File) => {
         currency: extractedData.currency || form.value.currency,
         date: extractedData.date || form.value.date,
         location: extractedData.location || form.value.location,
-        expense_type: extractedData.expense_type || form.value.expense_type
+        expense_type: extractedData.expense_type || form.value.expense_type,
+        description: extractedData.description || form.value.description // Added description update
       };
     }
   } catch (err) {
