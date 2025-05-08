@@ -170,36 +170,76 @@ exports.handler = async (event, context) => {
       // Replace variables with their values - handle complex cases where variables might be embedded in text
       let result = text;
       let variablesReplaced = false;
-      let matchCount = 0;
       
-      // Extract all variable patterns from the text
-      const variableMatches = text.match(/\{\{([^}]+)\}\}/g) || [];
-      matchCount = variableMatches.length;
-      
-      if (matchCount > 0) {
-        console.log(`  Found ${matchCount} variable pattern(s) in text`);
+      try {
+        // Use split and join for more reliable handling of special characters
+        // This is more reliable than regex replace for complex patterns
+        const parts = result.split(/(\{\{[^}]+\}\})/g);
         
-        // Process each variable match
-        variableMatches.forEach(match => {
-          // Extract variable name without braces
-          const varName = match.substring(2, match.length - 2).trim();
+        // Count the number of potential variable parts (those that match the pattern)
+        const matchCount = parts.filter(part => part.match(/^\{\{[^}]+\}\}$/)).length;
+        console.log(`  Found ${matchCount} potential variable pattern(s) in text using split method`);
+        
+        // Process each part - if it's a variable pattern, replace it
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
           
-          // Check if variable exists in our variables object
-          if (variables[varName] !== undefined) {
-            // Do a global replace for this specific variable
-            const regex = new RegExp(escapeRegExp(match), 'g');
+          // Check if this part is a variable pattern
+          if (part.match(/^\{\{[^}]+\}\}$/)) {
+            // Extract variable name without braces
+            const varName = part.substring(2, part.length - 2).trim();
             
-            // If the variable is embedded in a larger string (like ____{{date.formatted}}____)
-            // we need to handle it carefully to preserve the surrounding text
-            const replacement = variables[varName].toString();
-            result = result.replace(regex, replacement);
-            
-            console.log(`  Replacing {{${varName}}} with "${replacement}"`);
-            variablesReplaced = true;
-          } else {
-            console.log(`  Variable {{${varName}}} not found, keeping as is`);
+            // Check if variable exists in our variables object
+            if (variables[varName] !== undefined) {
+              // Replace this part with the variable value
+              const replacement = variables[varName].toString();
+              parts[i] = replacement;
+              console.log(`  Replacing {{${varName}}} with "${replacement}"`);
+              variablesReplaced = true;
+            } else {
+              console.log(`  Variable {{${varName}}} not found, keeping as is`);
+            }
           }
-        });
+        }
+        
+        // Join all parts back together
+        if (variablesReplaced) {
+          result = parts.join('');
+        }
+      } catch (error) {
+        console.error('Error during variable processing:', error);
+        
+        // Fall back to the previous regex-based approach
+        console.log('  Falling back to regex-based variable replacement');
+        
+        // Extract all variable patterns from the text
+        const variableMatches = text.match(/\{\{([^}]+)\}\}/g) || [];
+        
+        if (variableMatches.length > 0) {
+          console.log(`  Found ${variableMatches.length} variable pattern(s) using regex fallback`);
+          
+          // Process each variable match
+          variableMatches.forEach(match => {
+            // Extract variable name without braces
+            const varName = match.substring(2, match.length - 2).trim();
+            
+            // Check if variable exists in our variables object
+            if (variables[varName] !== undefined) {
+              // Do a global replace for this specific variable
+              const regex = new RegExp(escapeRegExp(match), 'g');
+              
+              // If the variable is embedded in a larger string (like ____{{date.formatted}}____)
+              // we need to handle it carefully to preserve the surrounding text
+              const replacement = variables[varName].toString();
+              result = result.replace(regex, replacement);
+              
+              console.log(`  Replacing {{${varName}}} with "${replacement}" (fallback method)`);
+              variablesReplaced = true;
+            } else {
+              console.log(`  Variable {{${varName}}} not found, keeping as is`);
+            }
+          });
+        }
       }
       
       // If we replaced something, log the result
@@ -1223,6 +1263,11 @@ exports.handler = async (event, context) => {
       const customTextTest = "Today is {{date.formatted}} - Report by {{user.full_name}}";
       const processedCustomTest = processVariables(customTextTest, templateVariables);
       console.log(`Test with custom text: "${customTextTest}" -> "${processedCustomTest}"`);
+      
+      // Special test for the problematic case with underscores
+      const underscoreTest = "_____ {{date.formatted}}________";
+      const processedUnderscoreTest = processVariables(underscoreTest, templateVariables);
+      console.log(`Test with underscores: "${underscoreTest}" -> "${processedUnderscoreTest}"`);
       
       // Special test for variables without braces
       const withoutBracesTest = "Date formatted: date.formatted";
