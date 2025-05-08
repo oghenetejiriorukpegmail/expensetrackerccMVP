@@ -220,16 +220,24 @@
           <!-- Receipt preview image -->
           <div class="mt-2 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
             <img 
-              v-if="form.receipt_url && !form.receipt_url.endsWith('pdf')" 
+              v-if="form.receipt_url && !form.receipt_is_pdf" 
               :src="form.receipt_url" 
               alt="Receipt preview" 
               class="max-h-48 w-auto mx-auto object-contain"
             />
             <div 
               v-else 
-              class="h-24 flex items-center justify-center bg-gray-100 dark:bg-gray-800"
+              class="h-24 flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-800"
             >
+              <component :is="DocumentIcon" class="w-8 h-8 text-gray-400 dark:text-gray-500 mb-2" />
               <p class="text-sm text-gray-500 dark:text-gray-400">PDF Document</p>
+              <a 
+                :href="form.receipt_url" 
+                target="_blank" 
+                class="mt-2 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                Open PDF
+              </a>
             </div>
           </div>
         </div>
@@ -424,7 +432,8 @@ const form = ref({
   date: dayjs().format('YYYY-MM-DD'),
   location: '',
   description: '',
-  receipt_url: ''
+  receipt_url: '',
+  receipt_is_pdf: false
 });
 
 // Get receipt filename from URL
@@ -464,7 +473,10 @@ onMounted(async () => {
       date: expense.date,
       location: expense.location || '',
       description: expense.description || '',
-      receipt_url: expense.receipt_url || ''
+      receipt_url: expense.receipt_url || '',
+      receipt_is_pdf: expense.receipt_url ? 
+        (expense.receipt_url.toLowerCase().endsWith('.pdf') || 
+         expense.receipt_url.toLowerCase().includes('application/pdf')) : false
     };
   }
 });
@@ -485,6 +497,15 @@ function handleReceiptChange(event) {
     // Generate a preview URL for the selected file
     const previewUrl = URL.createObjectURL(file);
     form.value.receipt_url = previewUrl;
+    
+    // Store the file type for proper preview handling
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      form.value.receipt_is_pdf = true;
+    } else {
+      form.value.receipt_is_pdf = false;
+    }
+    
+    console.log(`Receipt type: ${file.type}, Is PDF: ${form.value.receipt_is_pdf}`);
   }
 }
 
@@ -495,6 +516,7 @@ function removeReceipt() {
     URL.revokeObjectURL(form.value.receipt_url);
   }
   form.value.receipt_url = '';
+  form.value.receipt_is_pdf = false;
   receiptFile.value = null;
 }
 
