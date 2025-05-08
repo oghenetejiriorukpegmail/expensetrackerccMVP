@@ -479,13 +479,19 @@ onMounted(async () => {
          expense.receipt_url.toLowerCase().includes('application/pdf')) : false
     };
   }
+  
+  // Add event listener for receipt description updates
+  window.addEventListener('receipt-description-updated', handleReceiptDescriptionUpdate);
 });
 
-// Clean up any blob URLs when component is unmounted
+// Clean up any blob URLs and event listeners when component is unmounted
 onUnmounted(() => {
   if (form.value.receipt_url && form.value.receipt_url.startsWith('blob:')) {
     URL.revokeObjectURL(form.value.receipt_url);
   }
+  
+  // Remove event listener when component is unmounted
+  window.removeEventListener('receipt-description-updated', handleReceiptDescriptionUpdate);
 });
 
 // Handle file input change
@@ -573,6 +579,29 @@ function applyExtractedData() {
   
   // Clear extracted data after applying
   extractedData.value = null;
+}
+
+// Handle receipt description update event
+function handleReceiptDescriptionUpdate(event) {
+  console.log('Received receipt description update event:', event.detail);
+  
+  // Check if we have the necessary data
+  if (event.detail && event.detail.description) {
+    // Store the received description
+    const description = event.detail.description;
+    console.log('Setting form description from async update:', description);
+    
+    // Update the description in the form
+    form.value.description = description;
+    
+    // Log the form state after updating
+    console.log('Form state after description update:', JSON.stringify({
+      vendor: form.value.vendor,
+      amount: form.value.amount,
+      expense_type: form.value.expense_type,
+      description: form.value.description
+    }));
+  }
 }
 
 // Submit form
