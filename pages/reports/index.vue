@@ -534,7 +534,8 @@ async function generateExcelReport() {
       tripId: form.value.tripId || null,
       startDate: form.value.startDate || null,
       endDate: form.value.endDate || null,
-      templateUrl: form.value.useTemplate ? userSettings.value.excel_template_url : null
+      templateUrl: form.value.useTemplate ? userSettings.value.excel_template_url : null,
+      userId: supabaseUser.value?.id // Pass the current user's ID explicitly
     };
     
     // Call the Netlify function

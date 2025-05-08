@@ -17,7 +17,10 @@ exports.handler = async (event, context) => {
 
   try {
     // Parse the request body
-    const { tripId, startDate, endDate, templateUrl } = JSON.parse(event.body);
+    const { tripId, startDate, endDate, templateUrl, userId: requestUserId } = JSON.parse(event.body);
+    
+    // Log the request with the user ID if it's provided
+    console.log('Report request parameters:', { tripId, startDate, endDate, hasTemplate: !!templateUrl, requestUserId });
     
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -589,122 +592,191 @@ exports.handler = async (event, context) => {
       // Fetch user profile for user variables
       let userProfile = null;
       try {
-        // For server-side function using SUPABASE_SERVICE_KEY, we need to get user ID from request
-        let userId = null;
-
-        // First try to get user ID from the data we have
-        // Priority order: 1) Trip data, 2) Expenses data, 3) Auth context
-        if (tripId) {
-          // Get the trip's user ID
-          const { data: tripUserData } = await supabase
-            .from('trips')
-            .select('user_id')
-            .eq('id', tripId)
-            .single();
-            
-          if (tripUserData?.user_id) {
-            userId = tripUserData.user_id;
-            console.log('Using user ID from trip:', userId);
-          }
-        } 
-        
-        if (!userId && expenses.length > 0) {
-          // Get user ID from the first expense - make sure it's a valid ID
-          if (expenses[0].user_id) {
-            userId = expenses[0].user_id;
-            console.log('Using user ID from first expense:', userId);
-          } else {
-            // Try to find any expense with a valid user_id
-            for (const expense of expenses) {
-              if (expense.user_id) {
-                userId = expense.user_id;
-                console.log('Using user ID from expense item:', userId);
-                break;
-              }
-            }
-          }
-        }
-        
-        if (!userId && mileageRecords.length > 0) {
-          // Try to get user ID from mileage records
-          if (mileageRecords[0].user_id) {
-            userId = mileageRecords[0].user_id;
-            console.log('Using user ID from first mileage record:', userId);
-          }
-        }
-        
-        // Explicitly check if userId is a valid UUID format
-        const isValidUUID = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-        
-        // If we found a valid user ID, fetch the profile directly
-        if (isValidUUID) {
-          console.log(`Fetching profile for validated user ID: ${userId}`);
+        // Priority 1: Use the userId passed directly in the request if available
+        // This is the most reliable way to get the correct user
+        if (requestUserId) {
+          console.log('Using user ID provided in request:', requestUserId);
+          
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
-            .eq('id', userId)
+            .eq('id', requestUserId)
             .single();
             
           if (profileError) {
-            console.warn('Error fetching profile:', profileError.message);
+            console.warn('Error fetching profile from request userId:', profileError.message);
           } else if (profileData) {
             userProfile = profileData;
-            console.log('Found user profile for variable substitution:', profileData.full_name);
+            console.log('Using profile from request userId:', profileData.full_name);
+            
+            // Since we found the profile from the request, we can stop here
+            console.log('Successfully retrieved profile from request');
           } else {
-            console.warn('No profile found for user ID:', userId);
+            console.warn('No profile found for request user ID:', requestUserId);
           }
-        } else {
-          // Fallback to auth.getUser() if we couldn't get a valid user ID from data
-          console.log('No valid user ID found in data, trying auth.getUser()');
+        }
+        
+        // Priority 2: Use auth.getUser() if we don't have a profile yet
+        if (!userProfile) {
           try {
+            console.log('Attempting to get current user from auth context...');
             const { data: userData } = await supabase.auth.getUser();
+            
             if (userData?.user?.id) {
-              // Fetch the profile
-              const { data: profileData } = await supabase
+              console.log('Found current user in auth context:', userData.user.id);
+              
+              // Fetch the profile for the current user
+              const { data: profileData, error: profileError } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userData.user.id)
                 .single();
                 
-              if (profileData) {
+              if (profileError) {
+                console.warn('Error fetching current user profile:', profileError.message);
+              } else if (profileData) {
                 userProfile = profileData;
-                console.log('Found user profile from auth.getUser():', profileData.full_name);
+                console.log('Using current user profile:', profileData.full_name);
+                
+                // Since we found the current user's profile, we can stop here
+                console.log('Successfully retrieved current user profile');
               } else {
-                console.warn('No profile found using auth.getUser() ID:', userData.user.id);
+                console.warn('No profile found for current user ID:', userData.user.id);
               }
             } else {
-              console.warn('No user data from auth.getUser()');
+              console.warn('No current user data available from auth.getUser()');
             }
           } catch (authError) {
-            console.warn('Error in auth.getUser():', authError.message);
+            console.warn('Error getting current user from auth:', authError.message);
+          }
+        }
+        
+        // Only proceed with fallbacks if we couldn't get the current user's profile
+        if (!userProfile) {
+          console.log('Falling back to trip/expense data to find user profile...');
+          let userId = null;
+          
+          // Priority 2: Try to get user ID from trip data
+          if (tripId) {
+            const { data: tripUserData } = await supabase
+              .from('trips')
+              .select('user_id')
+              .eq('id', tripId)
+              .single();
+              
+            if (tripUserData?.user_id) {
+              userId = tripUserData.user_id;
+              console.log('Using user ID from trip:', userId);
+            }
+          } 
+          
+          // Priority 3: Try expense data
+          if (!userId && expenses.length > 0) {
+            // Create a frequency map of user_ids to find the most common one
+            // This is more reliable than just taking the first one
+            const userIdCounts = {};
+            
+            for (const expense of expenses) {
+              if (expense.user_id) {
+                userIdCounts[expense.user_id] = (userIdCounts[expense.user_id] || 0) + 1;
+              }
+            }
+            
+            // Find the most frequent user_id
+            let maxCount = 0;
+            for (const [id, count] of Object.entries(userIdCounts)) {
+              if (count > maxCount) {
+                maxCount = count;
+                userId = id;
+              }
+            }
+            
+            if (userId) {
+              console.log('Using most frequent user ID from expenses:', userId);
+            }
+          }
+          
+          // Priority 4: Try mileage data
+          if (!userId && mileageRecords.length > 0) {
+            for (const record of mileageRecords) {
+              if (record.user_id) {
+                userId = record.user_id;
+                console.log('Using user ID from mileage record:', userId);
+                break;
+              }
+            }
+          }
+          
+          // Verify the user ID is valid
+          const isValidUUID = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+          
+          if (isValidUUID) {
+            console.log(`Fetching profile for valid user ID: ${userId}`);
+            const { data: profileData, error: profileError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single();
+              
+            if (profileError) {
+              console.warn('Error fetching profile:', profileError.message);
+            } else if (profileData) {
+              userProfile = profileData;
+              console.log('Found fallback user profile:', profileData.full_name);
+            } else {
+              console.warn('No profile found for user ID:', userId);
+            }
+          } else {
+            console.warn('Could not find a valid user ID in the data');
+          }
+          
+          // Only use this as a last resort - try to get the request user from headers
+          if (!userProfile && event.headers) {
+            try {
+              console.log('Attempting to extract user from request headers...');
+              
+              // Try to get Authorization header
+              const authHeader = event.headers.authorization || event.headers.Authorization;
+              if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.substring(7);
+                const { data, error } = await supabase.auth.getUser(token);
+                
+                if (error) {
+                  console.warn('Error getting user from token:', error.message);
+                } else if (data?.user?.id) {
+                  console.log('Found user from request token:', data.user.id);
+                  
+                  const { data: profileData } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', data.user.id)
+                    .single();
+                    
+                  if (profileData) {
+                    userProfile = profileData;
+                    console.log('Found user profile from request token:', profileData.full_name);
+                  }
+                }
+              }
+            } catch (headerError) {
+              console.warn('Error extracting user from headers:', headerError.message);
+            }
           }
         }
       } catch (profileError) {
         console.warn('Could not fetch user profile for variables:', profileError.message);
       }
       
-      // If we still don't have a profile, try to get any profile as a last resort
+      // Hard-coded fallback values for demo/testing - prefer no profile to wrong profile
       if (!userProfile) {
-        try {
-          console.log('Using fallback method to get any user profile');
-          // Try to get the first expense's user profile
-          const { data: anyProfiles } = await supabase
-            .from('profiles')
-            .select('*')
-            .limit(1);
-          
-          if (anyProfiles && anyProfiles.length > 0) {
-            userProfile = anyProfiles[0];
-            console.log('Found fallback profile:', userProfile.full_name);
-          } else {
-            console.warn('No profiles found in the database');
-          }
-        } catch (fallbackError) {
-          console.warn('Error in fallback profile fetch:', fallbackError.message);
-        }
+        console.log('Using hard-coded fallback for user profile');
+        userProfile = {
+          full_name: 'Current User',
+          email: 'user@example.com'
+        };
       }
       
-      console.log('User profile data:', userProfile ? JSON.stringify(userProfile) : 'Not found');
+      console.log('Final user profile data:', userProfile ? JSON.stringify(userProfile) : 'Not found');
       
       // Build base variables object
       const variables = {
