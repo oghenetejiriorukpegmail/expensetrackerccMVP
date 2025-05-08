@@ -592,7 +592,8 @@ exports.handler = async (event, context) => {
         // For server-side function using SUPABASE_SERVICE_KEY, we need to get user ID from request
         let userId = null;
 
-        // First try to get user ID from the request
+        // First try to get user ID from the data we have
+        // Priority order: 1) Trip data, 2) Expenses data, 3) Auth context
         if (tripId) {
           // Get the trip's user ID
           const { data: tripUserData } = await supabase
@@ -605,14 +606,39 @@ exports.handler = async (event, context) => {
             userId = tripUserData.user_id;
             console.log('Using user ID from trip:', userId);
           }
-        } else if (expenses.length > 0) {
-          // Get user ID from the first expense
-          userId = expenses[0].user_id;
-          console.log('Using user ID from first expense:', userId);
+        } 
+        
+        if (!userId && expenses.length > 0) {
+          // Get user ID from the first expense - make sure it's a valid ID
+          if (expenses[0].user_id) {
+            userId = expenses[0].user_id;
+            console.log('Using user ID from first expense:', userId);
+          } else {
+            // Try to find any expense with a valid user_id
+            for (const expense of expenses) {
+              if (expense.user_id) {
+                userId = expense.user_id;
+                console.log('Using user ID from expense item:', userId);
+                break;
+              }
+            }
+          }
         }
         
-        // If we found a user ID, fetch the profile directly
-        if (userId) {
+        if (!userId && mileageRecords.length > 0) {
+          // Try to get user ID from mileage records
+          if (mileageRecords[0].user_id) {
+            userId = mileageRecords[0].user_id;
+            console.log('Using user ID from first mileage record:', userId);
+          }
+        }
+        
+        // Explicitly check if userId is a valid UUID format
+        const isValidUUID = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+        
+        // If we found a valid user ID, fetch the profile directly
+        if (isValidUUID) {
+          console.log(`Fetching profile for validated user ID: ${userId}`);
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
@@ -623,28 +649,59 @@ exports.handler = async (event, context) => {
             console.warn('Error fetching profile:', profileError.message);
           } else if (profileData) {
             userProfile = profileData;
-            console.log('Found user profile for variable substitution');
+            console.log('Found user profile for variable substitution:', profileData.full_name);
+          } else {
+            console.warn('No profile found for user ID:', userId);
           }
         } else {
-          // Fallback to auth.getUser() if we couldn't get user ID from data
-          console.log('No user ID found in data, trying auth.getUser()');
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData?.user?.id) {
-            // Fetch the profile
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', userData.user.id)
-              .single();
-              
-            if (profileData) {
-              userProfile = profileData;
-              console.log('Found user profile from auth.getUser()');
+          // Fallback to auth.getUser() if we couldn't get a valid user ID from data
+          console.log('No valid user ID found in data, trying auth.getUser()');
+          try {
+            const { data: userData } = await supabase.auth.getUser();
+            if (userData?.user?.id) {
+              // Fetch the profile
+              const { data: profileData } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userData.user.id)
+                .single();
+                
+              if (profileData) {
+                userProfile = profileData;
+                console.log('Found user profile from auth.getUser():', profileData.full_name);
+              } else {
+                console.warn('No profile found using auth.getUser() ID:', userData.user.id);
+              }
+            } else {
+              console.warn('No user data from auth.getUser()');
             }
+          } catch (authError) {
+            console.warn('Error in auth.getUser():', authError.message);
           }
         }
       } catch (profileError) {
         console.warn('Could not fetch user profile for variables:', profileError.message);
+      }
+      
+      // If we still don't have a profile, try to get any profile as a last resort
+      if (!userProfile) {
+        try {
+          console.log('Using fallback method to get any user profile');
+          // Try to get the first expense's user profile
+          const { data: anyProfiles } = await supabase
+            .from('profiles')
+            .select('*')
+            .limit(1);
+          
+          if (anyProfiles && anyProfiles.length > 0) {
+            userProfile = anyProfiles[0];
+            console.log('Found fallback profile:', userProfile.full_name);
+          } else {
+            console.warn('No profiles found in the database');
+          }
+        } catch (fallbackError) {
+          console.warn('Error in fallback profile fetch:', fallbackError.message);
+        }
       }
       
       console.log('User profile data:', userProfile ? JSON.stringify(userProfile) : 'Not found');
