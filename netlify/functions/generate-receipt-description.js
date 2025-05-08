@@ -73,32 +73,35 @@ async function generateAIDescription(apiKey, extractedReceipt) {
   console.log('Generating receipt description using OpenRouter API...');
   
   // Construct a detailed prompt with receipt information
-  let prompt = `Generate a concise 1-2 sentence business-appropriate description explaining the purpose of this expense.
-  
-Receipt Information:
-- Vendor: ${extractedReceipt.vendor || 'Unknown'}
-- Amount: ${extractedReceipt.amount || 0} ${extractedReceipt.currency || 'USD'}
-- Date: ${extractedReceipt.date || 'Unknown'}
-- Location: ${typeof extractedReceipt.location === 'object' ? 
+  let prompt = `IMPORTANT: DO NOT SHOW YOUR REASONING. PROVIDE ONLY THE FINAL OUTPUT.
+
+Write a direct, concise business expense description (1-2 sentences maximum) for:
+Vendor: ${extractedReceipt.vendor || 'Unknown'}
+Amount: ${extractedReceipt.amount || 0} ${extractedReceipt.currency || 'USD'}
+Date: ${extractedReceipt.date || 'Unknown'}
+Location: ${typeof extractedReceipt.location === 'object' ? 
   `${extractedReceipt.location.city || ''}, ${extractedReceipt.location.state || ''}, ${extractedReceipt.location.country || ''}` : 
   extractedReceipt.location || 'Unknown'}
-- Expense Type: ${extractedReceipt.expenseType || 'Other'}
+Expense Type: ${extractedReceipt.expenseType || 'Other'}
 `;
 
   // Add items if available
   if (extractedReceipt.items && extractedReceipt.items.length > 0) {
-    prompt += '\nPurchased Items:\n';
-    extractedReceipt.items.forEach(item => {
-      prompt += `- ${item.name}${item.quantity ? ` (Qty: ${item.quantity})` : ''}${item.price ? ` $${item.price}` : ''}\n`;
+    prompt += 'Items: ';
+    extractedReceipt.items.forEach((item, index) => {
+      prompt += `${item.name}${index < extractedReceipt.items.length - 1 ? ', ' : ''}`;
     });
+    prompt += '\n';
   }
 
   prompt += `
-Write a professional description that would be appropriate in a business expense report. 
-Focus on the business purpose of the expense. Keep it concise (1-2 sentences).
-Don't include the specific amount or date in the description.
-Don't start with phrases like "This expense is for" or "This receipt is for".
-Just provide the description text without any formatting or prefix.`;
+REQUIREMENTS:
+- RESPOND ONLY with the final description - NO explanation or reasoning
+- Keep it professional and concise (1-2 sentences only)
+- Focus on business purpose
+- Don't include specific amount or date
+- Don't use phrases like "This expense is for"
+- Output ONLY the description text without any formatting or prefix.`;
 
   try {
     // Log the API key (truncated for security)
@@ -140,8 +143,14 @@ Just provide the description text without any formatting or prefix.`;
               role: 'user',
               content: prompt
             }],
-            temperature: 0.3,  // Lower temperature for more focused output
-            max_tokens: 100    // Short response
+            temperature: 0.2,     // Lower temperature for more deterministic output
+            max_tokens: 50,       // Shorter response - we only need 1-2 sentences
+            top_p: 0.7,           // More focused sampling
+            response_format: { "type": "text" }, // Force plain text output
+            stop: ["\n\n"],       // Stop after a reasonable paragraph
+            extra_body: {
+              reasoning: false    // Explicitly disable reasoning mode
+            }
           })
         });
         console.log(`Received OpenRouter API response at ${new Date().toISOString()} with status: ${response.status}`);
