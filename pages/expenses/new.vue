@@ -244,7 +244,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useSupabaseUser, navigateTo, useRoute, useSupabaseClient } from '#imports';
 import { useTripStore } from '~/stores/tripStore';
 import { useExpenseStore } from '~/stores/expenseStore';
@@ -427,6 +427,31 @@ const saveExpense = async () => {
     loading.value = false;
   }
 };
+
+// Watch for description updates from the store
+watch(
+  () => expenseStore.generatedDescription,
+  (newDescription) => {
+    if (newDescription) {
+      console.log('New expense page detected description update from store:', newDescription);
+      // Add alert for debugging
+      if (typeof window !== 'undefined') {
+        window.alert('New expense page received description from store: ' + newDescription);
+      }
+      
+      // Update the form with the new description
+      form.value.description = newDescription;
+      
+      // Log the form state after updating
+      console.log('Form state after description update:', JSON.stringify({
+        vendor: form.value.vendor,
+        amount: form.value.amount,
+        expense_type: form.value.expense_type,
+        description: form.value.description
+      }));
+    }
+  }
+);
 
 // Get route params
 const route = useRoute();
