@@ -699,27 +699,18 @@ exports.handler = async (event, context) => {
       // Process the entities to extract receipt data
       const processedReceipt = processDocumentAIEntities(document, entities);
       
-      // Generate a description directly using OpenRouter API
+      // Generate a description directly using fallback method (OpenRouter API temporarily disabled)
       let description = null;
       try {
-        // Check if we have the OpenRouter API key directly
-        const apiKey = process.env.OPENROUTER_API_KEY;
+        console.log('OpenRouter API temporarily disabled - using fallback description');
+        // Use the fallback description generation instead of OpenRouter
+        description = generateFallbackDescription(processedReceipt);
+        console.log('Generated fallback description:', description);
         
-        if (apiKey) {
-          // Directly call the generateReceiptDescription function
-          try {
-            console.log('Generating description directly using OpenRouter API');
-            // Import the function we've already defined
-            description = await generateReceiptDescription(apiKey, processedReceipt);
-            console.log('Generated description directly:', description);
-          } catch (directError) {
-            console.error('Error generating description directly:', directError);
-          }
-        } else {
-          console.log('No OpenRouter API key available for direct description generation');
-        }
+        // Add a note that LLM descriptions are temporarily disabled
+        description += " (AI descriptions temporarily disabled)";
       } catch (descError) {
-        console.error('Error generating description:', descError);
+        console.error('Error generating fallback description:', descError);
         // Don't fail the whole request if description generation fails
       }
       
