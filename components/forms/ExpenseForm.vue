@@ -481,6 +481,7 @@ onMounted(async () => {
   }
   
   // Add event listener for receipt description updates
+  console.log('Setting up receipt-description-updated event listener');
   window.addEventListener('receipt-description-updated', handleReceiptDescriptionUpdate);
 });
 

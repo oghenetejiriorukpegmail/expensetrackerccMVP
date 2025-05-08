@@ -177,7 +177,7 @@ export async function processReceiptWithNetlifyFallback(
           // Dispatch an event so the UI can update
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('receipt-description-updated', { 
-              detail: { receiptId: extractedData.id, description }
+              detail: { description }
             }));
           }
         })
