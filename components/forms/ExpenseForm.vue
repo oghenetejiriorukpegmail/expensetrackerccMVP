@@ -584,6 +584,8 @@ function applyExtractedData() {
 
 // Handle receipt description update event
 function handleReceiptDescriptionUpdate(event) {
+  // Alert for debugging - this will be visible in the browser
+  alert('Received description: ' + (event.detail?.description || 'none'));
   console.log('Received receipt description update event:', event.detail);
   
   // Check if we have the necessary data

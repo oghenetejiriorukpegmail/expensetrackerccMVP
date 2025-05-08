@@ -167,6 +167,19 @@ export async function processReceiptWithNetlifyFallback(
     // If we need to fetch a description asynchronously, start that process
     // but don't wait for it - let the UI display what we have so far
     if (extractedData._needsAsyncDescription && extractedData._asyncDescriptionEndpoint) {
+      console.log('Starting async description request for receipt data:', {
+        vendor: extractedData.vendor,
+        amount: extractedData.amount,
+        date: extractedData.date,
+        expenseType: extractedData.expenseType,
+      });
+
+      // Add a direct alert before making the request, for debugging
+      if (typeof window !== 'undefined') {
+        // This will be visible in the browser
+        window.alert('Requesting async description from endpoint: ' + extractedData._asyncDescriptionEndpoint);
+      }
+
       requestAsyncDescription(extractedData)
         .then(description => {
           console.log('Async description generated:', description);
@@ -176,6 +189,10 @@ export async function processReceiptWithNetlifyFallback(
           
           // Dispatch an event so the UI can update
           if (typeof window !== 'undefined') {
+            // Use both console.log and alert for debugging
+            console.log('Dispatching receipt-description-updated event with description:', description);
+            window.alert('Generated description: ' + description);
+            
             window.dispatchEvent(new CustomEvent('receipt-description-updated', { 
               detail: { description }
             }));
@@ -183,6 +200,10 @@ export async function processReceiptWithNetlifyFallback(
         })
         .catch(descError => {
           console.error('Failed to generate async description:', descError);
+          // Show the error in the browser for debugging
+          if (typeof window !== 'undefined') {
+            window.alert('Failed to generate description: ' + descError.message);
+          }
           // Keep using the initial description
         });
     }
