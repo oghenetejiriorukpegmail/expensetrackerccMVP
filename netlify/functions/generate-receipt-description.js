@@ -118,8 +118,11 @@ REQUIREMENTS:
       temperature: 0.2,
       max_tokens: 150,
       top_p: 0.7,
-      response_format: { "type": "text" }
-      // extra_body removed here too for accurate logging
+      response_format: { "type": "text" },
+      extra_body: {
+        reasoning: false,
+        enable_thinking: false
+      }
     };
     console.log('OpenRouter request payload:', JSON.stringify(requestPayload));
     
@@ -147,11 +150,14 @@ REQUIREMENTS:
               content: prompt
             }],
             temperature: 0.2,     // Lower temperature for more deterministic output
-            max_tokens: 150,      // Keep this increased
+            max_tokens: 150,      // INCREASED TO ALLOW MORE OUTPUT SPACE
             top_p: 0.7,           // More focused sampling
             response_format: { "type": "text" }, // Force plain text output
-            stop: ["\n\n"]        // Stop after a reasonable paragraph
-            // extra_body has been removed
+            stop: ["\n\n"],       // Stop after a reasonable paragraph
+            extra_body: {
+              reasoning: false,   // Explicitly disable reasoning mode
+              enable_thinking: false // Explicitly disable thinking mode
+            }
           })
         });
         console.log(`Received OpenRouter API response at ${new Date().toISOString()} with status: ${response.status}`);
