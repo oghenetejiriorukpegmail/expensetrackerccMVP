@@ -164,11 +164,31 @@
             </label>
             <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center">
               <div v-if="form.receipt_url || receiptPreview" class="mb-4">
+                <!-- Image preview for non-PDF files -->
                 <img 
+                  v-if="!receiptIsPdf && !form.receipt_url?.toLowerCase?.().endsWith?.('.pdf')"
                   :src="receiptPreview || form.receipt_url" 
                   alt="Receipt preview" 
                   class="max-h-48 mx-auto rounded-lg shadow-sm" 
                 />
+                <!-- PDF preview placeholder -->
+                <div 
+                  v-else 
+                  class="h-24 flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-lg"
+                >
+                  <!-- PDF icon -->
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-gray-400 dark:text-gray-500 mb-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                  </svg>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">PDF Document</p>
+                  <a 
+                    :href="receiptPreview || form.receipt_url" 
+                    target="_blank" 
+                    class="mt-2 text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                  >
+                    Open PDF
+                  </a>
+                </div>
                 <button 
                   @click="clearReceipt" 
                   type="button"
@@ -254,6 +274,7 @@ const receiptFile = ref(null);
 const receiptPreview = ref('');
 const receiptProcessing = ref(false);
 const fileInput = ref(null);
+const receiptIsPdf = ref(false);
 
 const form = ref({
   trip_id: '',
@@ -282,6 +303,10 @@ const handleReceiptUpload = (event) => {
   receiptFile.value = file;
   receiptPreview.value = URL.createObjectURL(file);
   
+  // Detect if file is a PDF
+  receiptIsPdf.value = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  console.log(`Receipt type: ${file.type}, Is PDF: ${receiptIsPdf.value}`);
+  
   // Clear previous receipt URL when new file is uploaded
   form.value.receipt_url = '';
 };
@@ -289,6 +314,7 @@ const handleReceiptUpload = (event) => {
 const clearReceipt = () => {
   receiptFile.value = null;
   receiptPreview.value = '';
+  receiptIsPdf.value = false;
   form.value.receipt_url = '';
   if (fileInput.value) {
     fileInput.value.value = '';
@@ -369,6 +395,13 @@ onMounted(async () => {
         description: expense.description || '',
         receipt_url: expense.receipt_url || ''
       };
+      
+      // Check if existing receipt is a PDF
+      if (form.value.receipt_url) {
+        receiptIsPdf.value = form.value.receipt_url.toLowerCase().endsWith('.pdf') || 
+                             form.value.receipt_url.toLowerCase().includes('application/pdf');
+        console.log(`Existing receipt URL: ${form.value.receipt_url}, Is PDF: ${receiptIsPdf.value}`);
+      }
     } catch (err) {
       error.value = err.message || 'Failed to load expense data';
     } finally {
