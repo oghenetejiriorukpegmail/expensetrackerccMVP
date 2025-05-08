@@ -699,25 +699,14 @@ exports.handler = async (event, context) => {
       // Process the entities to extract receipt data
       const processedReceipt = processDocumentAIEntities(document, entities);
       
-      // Set a flag to indicate that description should be generated asynchronously
-      // This separates the slow description generation from the main receipt processing
-      let needsDescription = true;
+      // Always use the async description generation without fallback
+      // as it's now fast and reliable with Mistral AI
+      processedReceipt._needsAsyncDescription = true;
       
-      // Generate a simple fallback description for immediate display 
-      // But the client will request a better one asynchronously
-      let fallbackDescription = null;
-      try {
-        console.log('Using simplified fallback description - full description will be requested separately');
-        fallbackDescription = generateFallbackDescription(processedReceipt);
-        console.log('Generated initial fallback description:', fallbackDescription);
-        
-        // Set the temporary description but mark it for replacement
-        processedReceipt._initialDescription = fallbackDescription;
-        processedReceipt._needsAsyncDescription = true;
-      } catch (descError) {
-        console.error('Error generating initial fallback description:', descError);
-        // Don't fail the whole request if description generation fails
-      }
+      // Skip generating a fallback description as the async one is working well
+      console.log('Skipping fallback description - async description will be requested directly');
+      
+      // No temporary fallback description needed since the Mistral model is fast enough
       
       // Return the processed receipt with instructions for async description
       return {
@@ -730,8 +719,8 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           receipt: processedReceipt,
           message: 'Receipt processed successfully with Document AI',
-          initialDescription: fallbackDescription,
-          // Include flags for the new async description flow
+          // No initial description since we're using the async one directly
+          // Include flags for the async description flow
           needsAsyncDescription: true,
           asyncDescriptionEndpoint: '/.netlify/functions/generate-receipt-description'
         })
