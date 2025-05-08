@@ -110,7 +110,7 @@ REQUIREMENTS:
     
     // Log the request payload (without the prompt for brevity)
     const requestPayload = {
-      model: 'mistralai/mistral-7b-instruct:free',
+      model: 'qwen/qwen3-8b:free',
       messages: [{
         role: 'user',
         content: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt
@@ -144,7 +144,7 @@ REQUIREMENTS:
             'X-Title': 'Expense Tracker'
           },
           body: JSON.stringify({
-            model: 'mistralai/mistral-7b-instruct:free',  // Using Mistral 7B model (free tier)
+            model: 'qwen/qwen3-8b:free',  // Using Qwen 3 8B model (free tier)
             messages: [{
               role: 'user',
               content: prompt
