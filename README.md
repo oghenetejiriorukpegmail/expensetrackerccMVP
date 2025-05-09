@@ -19,6 +19,7 @@ A comprehensive expense tracking application built with Nuxt 3, Supabase, and Vu
 - **AI Integration**: Google Document AI for receipt processing
 - **State Management**: Pinia
 - **Styling**: TailwindCSS
+- **Testing**: Vitest for unit tests, Playwright for E2E tests
 
 ## Installation
 
@@ -49,6 +50,37 @@ A comprehensive expense tracking application built with Nuxt 3, Supabase, and Vu
    npm run dev
    ```
 
+## Testing
+
+### Unit Tests
+
+```bash
+# Run all unit tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+### End-to-End Tests
+
+```bash
+# Install Playwright browsers
+npx playwright install
+
+# Run all e2e tests
+npm run test:e2e
+
+# Run e2e tests with UI
+npm run test:e2e:ui
+
+# Debug e2e tests
+npm run test:e2e:debug
+```
+
 ## Database Setup
 
 The application requires a Supabase database with specific tables and RLS policies. See [README-STORAGE-FIX.md](./README-STORAGE-FIX.md) for detailed SQL setup instructions.
@@ -70,6 +102,12 @@ For instructions on deploying this application to Netlify, see [NETLIFY-DEPLOYME
 - `server/`: Server-side code
 - `stores/`: Pinia stores
 - `utils/`: Utility functions
+- `test/`: Unit tests with Vitest
+- `e2e/`: End-to-end tests with Playwright
+
+## CI/CD
+
+This project is configured with GitHub Actions for continuous integration. The workflow automatically runs unit tests and end-to-end tests on push to the main branch or on pull requests.
 
 ## Key Files
 
@@ -79,6 +117,7 @@ For instructions on deploying this application to Netlify, see [NETLIFY-DEPLOYME
 - `stores/tripStore.ts`: Trip management
 - `stores/expenseStore.ts`: Expense management
 - `utils/ai-processing.ts`: Receipt AI processing
+- `playwright.config.ts`: Playwright configuration for E2E tests
 
 ## MCP Integration
 
